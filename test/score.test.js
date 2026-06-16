@@ -35,3 +35,27 @@ test('does not mark REDUNDANT when candidate adds a unique capability', () => {
 test('redundancy floor is 1 with no overlaps', () => {
   assert.equal(scoreAnalysis(base([])).scores.redundancy, 1);
 });
+
+test('roast summary cites the most damning finding', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'secret-reference', category: 'security', severity: 'high', title: 'Secret access', evidence: 'README references .env files.' },
+    { id: 'missing-license', category: 'maintenance', severity: 'medium', title: 'No license', evidence: 'No license found.' },
+  ]));
+  // the high-severity finding wins over the medium one
+  assert.match(scored.summary, /\.env/);
+});
+
+test('roast summary for REDUNDANT names the overlap', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'redundant-installed', category: 'redundancy', severity: 'medium', strength: 'strong', title: 't', evidence: 'Already installed locally as dep `prettier`.' },
+    { id: 'redundant-capability', category: 'redundancy', severity: 'medium', strength: 'strong', title: 't', evidence: 'Overlaps with your existing skill `review`.' },
+  ], { hasUniqueCapability: false }));
+  assert.equal(scored.verdict, 'REDUNDANT');
+  assert.match(scored.summary, /prettier|review/);
+});
+
+test('roast summary still works with no findings', () => {
+  const scored = scoreAnalysis(base([]));
+  assert.equal(typeof scored.summary, 'string');
+  assert.ok(scored.summary.length > 0);
+});

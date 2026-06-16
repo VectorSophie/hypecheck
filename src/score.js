@@ -30,8 +30,31 @@ export function scoreAnalysis(analysis) {
     verdict,
     scores,
     confidence: analysis.findings.length >= 3 ? 'medium' : 'low',
-    summary: summaryFor(verdict),
+    summary: roast(verdict, analysis.findings),
   };
+}
+
+const OPENERS = {
+  DANGEROUS: 'Dangerous. This touches sharp objects and acts casual about it',
+  SKIP: 'Skip. Mostly install friction with a hat',
+  TRIAL: 'Trial only. Useful-looking, but keep it on a short leash',
+  REDUNDANT: 'Redundant. You already own this flavor of chaos',
+  INSTALL: 'Install. The evidence does not scream at us yet',
+};
+
+// Blunt one-liner = verdict opener + the single most damning finding's evidence.
+function roast(verdict, findings) {
+  const opener = OPENERS[verdict] ?? OPENERS.INSTALL;
+  const top = topFinding(verdict, findings);
+  return top ? `${opener}: ${top.evidence}` : `${opener}.`;
+}
+
+function topFinding(verdict, findings) {
+  if (findings.length === 0) return null;
+  // For REDUNDANT, lead with the overlap that earned the verdict.
+  const preferred = verdict === 'REDUNDANT' ? 'redundancy' : null;
+  const rank = (f) => (SEVERITY_WEIGHT[f.severity] ?? 1) + (f.category === preferred ? 10 : 0);
+  return [...findings].sort((a, b) => rank(b) - rank(a))[0];
 }
 
 function pointsFor(findings, category) {
@@ -48,14 +71,6 @@ function chooseVerdict(scores, findings, hasUniqueCapability) {
   if (scores.overkillIndex >= 70) return 'SKIP';
   if (scores.securityRisk >= 7) return 'TRIAL';
   return 'INSTALL';
-}
-
-function summaryFor(verdict) {
-  if (verdict === 'DANGEROUS') return 'Dangerous. This touches sharp objects and acts casual about it.';
-  if (verdict === 'SKIP') return 'Skip. This is mostly install friction with a hat.';
-  if (verdict === 'TRIAL') return 'Trial only. Useful-looking, but keep it on a short leash.';
-  if (verdict === 'REDUNDANT') return 'Redundant. You already own this flavor of chaos.';
-  return 'Install. The evidence does not scream at us yet.';
 }
 
 function clamp(value, min, max) {
