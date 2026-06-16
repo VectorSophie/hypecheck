@@ -42,11 +42,18 @@ const OPENERS = {
   INSTALL: 'Install. The evidence does not scream at us yet',
 };
 
-// Blunt one-liner = verdict opener + the single most damning finding's evidence.
+const NEGATIVE_VERDICTS = new Set(['DANGEROUS', 'SKIP', 'REDUNDANT']);
+
+// Blunt one-liner. For negative verdicts the top finding IS the reason, so lead
+// with it. For positive verdicts (INSTALL/TRIAL) a finding is a caveat, not the
+// reason — frame it as a watch-out so the line doesn't contradict the verdict.
 function roast(verdict, findings) {
   const opener = OPENERS[verdict] ?? OPENERS.INSTALL;
   const top = topFinding(verdict, findings);
-  return top ? `${opener}: ${top.evidence}` : `${opener}.`;
+  if (!top) return `${opener}.`;
+  if (NEGATIVE_VERDICTS.has(verdict)) return `${opener}: ${top.evidence}`;
+  const notable = (SEVERITY_WEIGHT[top.severity] ?? 1) >= 2;
+  return notable ? `${opener}. Worth a closer look: ${top.evidence}` : `${opener}.`;
 }
 
 function topFinding(verdict, findings) {

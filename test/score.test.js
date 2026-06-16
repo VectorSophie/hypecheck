@@ -54,6 +54,24 @@ test('roast summary for REDUNDANT names the overlap', () => {
   assert.match(scored.summary, /prettier|review/);
 });
 
+test('positive verdict frames a risky finding as a caveat, not the verdict reason', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'secret-reference', category: 'security', severity: 'high', title: 't', evidence: 'README references .env files.' },
+  ]));
+  assert.equal(scored.verdict, 'INSTALL');
+  assert.match(scored.summary, /Worth a closer look/);
+  // must NOT read as "...does not scream at us yet: README references .env" (self-contradiction)
+  assert.ok(!/yet: README/.test(scored.summary));
+});
+
+test('clean positive verdict with only a low finding stays terse', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'agent-tooling-scope', category: 'workflow', severity: 'low', title: 't', evidence: 'It is an agent tool.' },
+  ]));
+  assert.equal(scored.verdict, 'INSTALL');
+  assert.doesNotMatch(scored.summary, /Worth a closer look/);
+});
+
 test('roast summary still works with no findings', () => {
   const scored = scoreAnalysis(base([]));
   assert.equal(typeof scored.summary, 'string');
