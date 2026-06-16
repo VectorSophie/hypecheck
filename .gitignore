@@ -1,3 +1,6 @@
 node_modules/
 .env
 .env.*
+
+# design specs are kept locally, not published
+docs/specs/
