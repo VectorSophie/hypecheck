@@ -46,9 +46,10 @@ export function scanLocalContext({ cwd, home, fs } = {}) {
     for (const name of Array.isArray(plugins) ? plugins : Object.keys(plugins ?? {})) {
       add('plugin', typeof name === 'string' ? name : name?.name);
     }
-    for (const matchers of Object.values(json.hooks ?? {})) {
+    for (const [event, matchers] of Object.entries(json.hooks ?? {})) {
       for (const entry of Array.isArray(matchers) ? matchers : []) {
-        add('hook', entry?.matcher ?? 'hook');
+        const name = entry?.matcher ?? 'hook';
+        tools.push({ kind: 'hook', event, name, tags: tagCapabilities(name) });
       }
     }
   };

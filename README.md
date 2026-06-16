@@ -94,11 +94,18 @@ Then `/hypecheck <github-url | npm-package | x-link>`.
 ```sh
 npx @jackochesstern/hypecheck eval @modelcontextprotocol/server-filesystem
 npx @jackochesstern/hypecheck eval https://github.com/owner/repo --json
+npx @jackochesstern/hypecheck compare owner/repo-a owner/repo-b
+npx @jackochesstern/hypecheck explain configured-hook
 ```
 
-`--no-scan` skips the local redundancy scan. `--scan <path>` points it at another project.
+- `eval` — score one candidate. `--no-scan` skips the local redundancy/collision scan; `--scan <path>` points it at another project.
+- `compare A B` — evaluate two candidates side by side.
+- `explain <finding-id>` — why a finding matters and how to verify it yourself.
+- `--track` (on `eval`) — opt-in. Caches the candidate's public surface to `~/.hypecheck/` and, on the next `--track` run, flags **drift**: hooks or MCP servers added since you last vetted it (the rug-pull case). Off by default; reads/writes nothing without it, and never stores your config or secrets.
 
-GitHub's unauthenticated API is 60 requests/hour. Set `GITHUB_TOKEN` to raise it to 5000/hr — Hypecheck reads it from the environment.
+It also cross-references the candidate's hooks/MCP servers against your local `.claude` config and flags **collisions** — "adds a PostToolUse hook; you already run 2 on that event."
+
+GitHub's unauthenticated API is 60 requests/hour. Set `GITHUB_TOKEN` to raise it to 5000/hr — Hypecheck reads it from the environment (or a local `.env`).
 
 ## Exit codes
 

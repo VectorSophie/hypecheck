@@ -20,10 +20,12 @@ export function analyzeCandidate(data, options = {}) {
   }
 
   const hookEvents = extractHookEvents(data.manifests);
-  analyzeManifests(hookEvents, extractMcpServers(data.manifests), findings);
+  const mcpServers = extractMcpServers(data.manifests);
+  analyzeManifests(hookEvents, mcpServers, findings);
   analyzeText(data.readme ?? data.html ?? '', findings, { manifestHooksFound: hookEvents.length > 0 });
 
   const localTools = options.localTools;
+  if (localTools) analyzeCollisions(hookEvents, mcpServers, localTools, findings);
   const redundancy = analyzeRedundancy(data, targetName, localTools, findings);
 
   return {
@@ -179,6 +181,38 @@ function analyzeManifests(hookEvents, mcpServers, findings) {
       title: 'Bundles MCP server(s)',
       evidence: `Declares ${mcpServers.length} MCP server(s)${withSecrets ? `, ${withSecrets} requiring credentials` : ''}.`,
     });
+  }
+}
+
+// Cross-reference the candidate's configured surface against what the user
+// already runs locally — "this collides with your workflow."
+function analyzeCollisions(candidateHooks, candidateMcp, localTools, findings) {
+  const localHookEvents = localTools.filter((t) => t.kind === 'hook' && t.event);
+  const candidateEvents = new Set(candidateHooks.map((h) => h.event));
+  for (const event of candidateEvents) {
+    const localOnEvent = localHookEvents.filter((t) => t.event === event);
+    if (localOnEvent.length > 0) {
+      findings.push({
+        id: 'hook-event-collision',
+        severity: 'medium',
+        category: 'workflow',
+        title: 'Hook event collision',
+        evidence: `Adds a ${event} hook; you already run ${localOnEvent.length} hook(s) on ${event}.`,
+      });
+    }
+  }
+
+  const localMcpNames = new Set(localTools.filter((t) => t.kind === 'mcp').map((t) => t.name));
+  for (const server of candidateMcp) {
+    if (localMcpNames.has(server.name)) {
+      findings.push({
+        id: 'mcp-name-collision',
+        severity: 'medium',
+        category: 'workflow',
+        title: 'MCP server name collision',
+        evidence: `Registers an MCP server named \`${server.name}\`, which you already have configured locally.`,
+      });
+    }
   }
 }
 

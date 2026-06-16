@@ -9,7 +9,10 @@ try { process.loadEnvFile(); } catch { /* no .env or unsupported runtime */ }
 
 import { evaluateCandidate } from '../src/evaluate.js';
 import { scanLocalContext } from '../src/local-context.js';
-import { renderMarkdownReport } from '../src/report.js';
+import { renderMarkdownReport, renderComparison } from '../src/report.js';
+import { explainFinding, FINDING_DOCS } from '../src/finding-docs.js';
+
+const NEGATIVE = new Set(['SKIP', 'REDUNDANT', 'DANGEROUS']);
 
 export async function runCli(argv, options = {}) {
   const stdout = options.stdout ?? ((text) => process.stdout.write(text));
@@ -17,40 +20,75 @@ export async function runCli(argv, options = {}) {
 
   const args = [...argv];
   const command = args.shift();
-  const json = removeFlag(args, '--json');
-  const noScan = removeFlag(args, '--no-scan');
-  const scanOverride = removeOption(args, '--scan');
-  const candidate = args.join(' ').trim();
 
   if (!command || command === '--help' || command === '-h') {
     stdout(usage());
     return 0;
   }
+  if (command === 'eval') return cmdEval(args, options, stdout, stderr);
+  if (command === 'compare') return cmdCompare(args, options, stdout, stderr);
+  if (command === 'explain') return cmdExplain(args, stdout, stderr);
 
-  if (command !== 'eval') {
-    stderr(`Unknown command: ${command}\n\n${usage()}`);
-    return 2;
-  }
+  stderr(`Unknown command: ${command}\n\n${usage()}`);
+  return 2;
+}
 
+function resolveLocalTools(args, options) {
+  if (removeFlag(args, '--no-scan')) return undefined;
+  return scanLocalContext({
+    cwd: removeOption(args, '--scan') ?? options.scanCwd ?? process.cwd(),
+    home: options.scanHome ?? os.homedir(),
+    fs: options.fsImpl ?? fs,
+  });
+}
+
+async function cmdEval(args, options, stdout, stderr) {
+  const json = removeFlag(args, '--json');
+  const track = removeFlag(args, '--track');
+  const localTools = resolveLocalTools(args, options);
+  const candidate = args.join(' ').trim();
   if (!candidate) {
     stderr(`Candidate is required.\n\n${usage()}`);
     return 2;
   }
-
-  const localTools = noScan ? undefined : scanLocalContext({
-    cwd: scanOverride ?? options.scanCwd ?? process.cwd(),
-    home: options.scanHome ?? os.homedir(),
-    fs: options.fsImpl ?? fs,
-  });
-
   try {
-    const report = await evaluateCandidate(candidate, { ...options, localTools });
+    const report = await evaluateCandidate(candidate, { ...options, localTools, track });
     stdout(json ? `${JSON.stringify(report, null, 2)}\n` : renderMarkdownReport(report));
-    return ['SKIP', 'REDUNDANT', 'DANGEROUS'].includes(report.verdict) ? 1 : 0;
+    return NEGATIVE.has(report.verdict) ? 1 : 0;
   } catch (error) {
     stderr(`${error.message}\n`);
     return 3;
   }
+}
+
+async function cmdCompare(args, options, stdout, stderr) {
+  const json = removeFlag(args, '--json');
+  const localTools = resolveLocalTools(args, options);
+  const [a, b] = args;
+  if (!a || !b) {
+    stderr(`compare needs two candidates.\n\n${usage()}`);
+    return 2;
+  }
+  try {
+    const ra = await evaluateCandidate(a, { ...options, localTools });
+    const rb = await evaluateCandidate(b, { ...options, localTools });
+    stdout(json ? `${JSON.stringify({ a: ra, b: rb }, null, 2)}\n` : renderComparison(ra, rb));
+    return (NEGATIVE.has(ra.verdict) || NEGATIVE.has(rb.verdict)) ? 1 : 0;
+  } catch (error) {
+    stderr(`${error.message}\n`);
+    return 3;
+  }
+}
+
+function cmdExplain(args, stdout, stderr) {
+  const id = args[0];
+  const text = id ? explainFinding(id) : null;
+  if (!text) {
+    stderr(`Unknown finding id: ${id ?? '(none)'}\n\nKnown ids:\n${Object.keys(FINDING_DOCS).map((x) => `  ${x}`).join('\n')}\n`);
+    return 2;
+  }
+  stdout(text);
+  return 0;
 }
 
 function removeFlag(args, flag) {
@@ -70,11 +108,14 @@ function removeOption(args, flag) {
 
 function usage() {
   return `Usage:
-  hypecheck eval <github-url | npm-package | npm-url | x-twitter-url> [--json] [--no-scan] [--scan <path>]
+  hypecheck eval <github-url | npm-package | npm-url | x-twitter-url> [--json] [--no-scan] [--scan <path>] [--track]
+  hypecheck compare <candidate-a> <candidate-b> [--json] [--no-scan]
+  hypecheck explain <finding-id>
 
   --json        emit the structured report instead of Markdown
   --no-scan     skip scanning local Claude Code / dev config for redundancy
   --scan <path> scan this project directory instead of the current one
+  --track       cache this eval and report drift on the next --track run
 `;
 }
 

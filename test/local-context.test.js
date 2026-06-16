@@ -54,6 +54,14 @@ test('reads command/skill names from directories', () => {
   assert.ok(review.tags.has('code-review'));
 });
 
+test('local hooks carry their event for collision detection', () => {
+  const tools = scanLocalContext(opts({
+    '/proj/.claude/settings.json': JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Write', hooks: [{ command: 'fmt' }] }] } }),
+  }));
+  const hook = tools.find((t) => t.kind === 'hook');
+  assert.equal(hook.event, 'PostToolUse');
+});
+
 test('does not read secret env values from .claude.json', () => {
   const tools = scanLocalContext(opts({
     '/home/.claude.json': JSON.stringify({ mcpServers: { db: { env: { SECRET_TOKEN: 'xyz' } } } }),

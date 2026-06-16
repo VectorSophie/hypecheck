@@ -138,6 +138,32 @@ test('README hook mention is demoted to low when a real hooks manifest exists', 
   assert.equal(analysis.findings.find((x) => x.id === 'dangerous-hook-event').severity, 'low');
 });
 
+test('flags a hook-event collision with a local hook on the same event', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: { hooks: { PostToolUse: [{ hooks: [{ command: 'x' }] }] } }, mcp: null },
+  }, { localTools: [{ kind: 'hook', event: 'PostToolUse', name: 'Write', tags: new Set() }] });
+  const f = analysis.findings.find((x) => x.id === 'hook-event-collision');
+  assert.ok(f);
+  assert.match(f.evidence, /PostToolUse/);
+});
+
+test('flags an MCP name collision with a local server', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: null, mcp: { mcpServers: { db: { command: 'node' } } } },
+  }, { localTools: [{ kind: 'mcp', name: 'db', tags: new Set() }] });
+  assert.ok(analysis.findings.some((x) => x.id === 'mcp-name-collision'));
+});
+
+test('no collision when candidate hooks a different event', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: { hooks: { SessionStart: [{ hooks: [{ command: 'x' }] }] } }, mcp: null },
+  }, { localTools: [{ kind: 'hook', event: 'PostToolUse', name: 'Write', tags: new Set() }] });
+  assert.equal(analysis.findings.some((x) => x.id === 'hook-event-collision'), false);
+});
+
 test('maps high risk findings to dangerous verdict', () => {
   const analysis = {
     candidate: { canonical: 'https://www.npmjs.com/package/sketchy-agent' },
