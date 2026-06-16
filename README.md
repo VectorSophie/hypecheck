@@ -1,4 +1,6 @@
-<h1 align="center">Hypecheck</h1>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/VectorSophie/hypecheck/main/logo/hypecheck-banner.png" width="380" alt="Hypecheck">
+</p>
 
 <p align="center">
   <em>Before you install another agent tool, run it through Hypecheck.</em>
