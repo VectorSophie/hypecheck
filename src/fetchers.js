@@ -32,9 +32,20 @@ async function fetchGithubCandidate(candidate, fetchImpl) {
     readme = '';
   }
 
+  // Best-effort: pull package.json for lifecycle/shell parity with npm. Many
+  // repos won't have one (or it's nested) — a miss is fine, not an error.
+  let pkg = null;
+  try {
+    const pkgResponse = await fetchJson(fetchImpl, `${repoUrl}/contents/package.json`);
+    pkg = JSON.parse(decodeBase64(pkgResponse.content ?? ''));
+  } catch {
+    pkg = null;
+  }
+
   return {
     source: 'github',
     candidate,
+    package: pkg,
     metadata: {
       fullName: repoResponse.full_name,
       description: repoResponse.description ?? '',

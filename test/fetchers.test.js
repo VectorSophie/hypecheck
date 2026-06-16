@@ -21,6 +21,9 @@ test('fetches GitHub repository metadata and README', async () => {
     if (url.endsWith('/repos/owner/repo/readme')) {
       return jsonResponse({ content: Buffer.from('npm install\npostinstall').toString('base64') });
     }
+    if (url.endsWith('/repos/owner/repo/contents/package.json')) {
+      return jsonResponse({ content: Buffer.from(JSON.stringify({ scripts: { postinstall: 'x' } })).toString('base64') });
+    }
     throw new Error(`unexpected URL ${url}`);
   };
 
@@ -29,7 +32,17 @@ test('fetches GitHub repository metadata and README', async () => {
   assert.equal(data.source, 'github');
   assert.equal(data.metadata.fullName, 'owner/repo');
   assert.equal(data.readme, 'npm install\npostinstall');
-  assert.equal(calls.length, 2);
+  assert.deepEqual(data.package.scripts, { postinstall: 'x' });
+  assert.equal(calls.length, 3);
+});
+
+test('GitHub fetch tolerates a missing package.json', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo' });
+    return jsonResponse(null, false); // readme + package.json both 404
+  };
+  const data = await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
+  assert.equal(data.package, null);
 });
 
 test('fetches npm metadata and extracts package signals', async () => {
