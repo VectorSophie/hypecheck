@@ -5,8 +5,14 @@ export async function fetchCandidateData(candidate, options = {}) {
     throw new Error('No fetch implementation available');
   }
 
+  // GitHub requires a User-Agent and rate-limits unauthenticated calls to 60/hr;
+  // a token raises that to 5000/hr. Token is opt-in via options or env.
+  const githubHeaders = { 'User-Agent': 'hypecheck' };
+  const token = options.githubToken ?? process.env.GITHUB_TOKEN;
+  if (token) githubHeaders.Authorization = `Bearer ${token}`;
+
   if (candidate.type === 'github') {
-    return fetchGithubCandidate(candidate, fetchImpl);
+    return fetchGithubCandidate(candidate, fetchImpl, githubHeaders);
   }
 
   if (candidate.type === 'npm') {
@@ -20,13 +26,13 @@ export async function fetchCandidateData(candidate, options = {}) {
   throw new Error(`Unsupported candidate type: ${candidate.type}`);
 }
 
-async function fetchGithubCandidate(candidate, fetchImpl) {
+async function fetchGithubCandidate(candidate, fetchImpl, headers) {
   const repoUrl = `https://api.github.com/repos/${candidate.owner}/${candidate.repo}`;
-  const repoResponse = await fetchJson(fetchImpl, repoUrl);
+  const repoResponse = await fetchJson(fetchImpl, repoUrl, headers);
 
   let readme = '';
   try {
-    const readmeResponse = await fetchJson(fetchImpl, `${repoUrl}/readme`);
+    const readmeResponse = await fetchJson(fetchImpl, `${repoUrl}/readme`, headers);
     readme = decodeBase64(readmeResponse.content ?? '');
   } catch {
     readme = '';
@@ -36,7 +42,7 @@ async function fetchGithubCandidate(candidate, fetchImpl) {
   // repos won't have one (or it's nested) — a miss is fine, not an error.
   let pkg = null;
   try {
-    const pkgResponse = await fetchJson(fetchImpl, `${repoUrl}/contents/package.json`);
+    const pkgResponse = await fetchJson(fetchImpl, `${repoUrl}/contents/package.json`, headers);
     pkg = JSON.parse(decodeBase64(pkgResponse.content ?? ''));
   } catch {
     pkg = null;
@@ -94,8 +100,8 @@ async function fetchSocialCandidate(candidate, fetchImpl) {
   };
 }
 
-async function fetchJson(fetchImpl, url) {
-  const response = await fetchImpl(url);
+async function fetchJson(fetchImpl, url, headers) {
+  const response = await fetchImpl(url, headers ? { headers } : undefined);
   if (!response.ok) {
     throw new Error(`Fetch failed for ${url}: ${response.status}`);
   }

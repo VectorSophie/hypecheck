@@ -6,6 +6,9 @@ import { tagCapabilities } from './capabilities.js';
 
 const join = (...parts) => parts.join('/');
 
+// Near-universal script names carry no capability signal — every package has them.
+const GENERIC_SCRIPTS = new Set(['test', 'build', 'start', 'dev', 'lint', 'prepare', 'prepublish', 'prepublishOnly', 'postinstall', 'preinstall']);
+
 export function scanLocalContext({ cwd, home, fs } = {}) {
   const tools = [];
   const add = (kind, name, extra = '') => {
@@ -63,7 +66,9 @@ export function scanLocalContext({ cwd, home, fs } = {}) {
 
     const pkg = readJson(join(cwd, 'package.json'));
     if (pkg) {
-      for (const name of Object.keys(pkg.scripts ?? {})) add('npm-script', name);
+      for (const name of Object.keys(pkg.scripts ?? {})) {
+        if (!GENERIC_SCRIPTS.has(name)) add('npm-script', name);
+      }
       for (const name of [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})]) {
         add('dep', name);
       }

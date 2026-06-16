@@ -76,6 +76,28 @@ test('fetches npm metadata and extracts package signals', async () => {
   assert.deepEqual(signals.bins, ['execa']);
 });
 
+test('sends a User-Agent and GITHUB_TOKEN auth header to the GitHub API', async () => {
+  let init;
+  const fetchImpl = async (url, opts) => {
+    init = opts;
+    return jsonResponse({ full_name: 'owner/repo' });
+  };
+  await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl, githubToken: 'ghp_x' });
+  assert.ok(init.headers['User-Agent']);
+  assert.equal(init.headers.Authorization, 'Bearer ghp_x');
+});
+
+test('omits the auth header when no token is provided', async () => {
+  let init;
+  const fetchImpl = async (url, opts) => {
+    init = opts;
+    return jsonResponse({ full_name: 'owner/repo' });
+  };
+  await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
+  assert.ok(init.headers['User-Agent']);
+  assert.equal(init.headers.Authorization, undefined);
+});
+
 test('extracts candidate links from social HTML', () => {
   const links = extractCandidateLinks(`
     <a href="https://github.com/VectorSophie/hypecheck">repo</a>

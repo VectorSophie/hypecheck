@@ -28,11 +28,21 @@ test('reads mcp servers from project .mcp.json', () => {
 
 test('reads npm scripts and deps from package.json', () => {
   const tools = scanLocalContext(opts({
-    '/proj/package.json': JSON.stringify({ scripts: { lint: 'eslint .' }, dependencies: { prettier: '^3' } }),
+    '/proj/package.json': JSON.stringify({ scripts: { crawl: 'node crawl.js' }, dependencies: { prettier: '^3' } }),
   }));
-  assert.ok(tools.some((t) => t.kind === 'npm-script' && t.name === 'lint'));
+  assert.ok(tools.some((t) => t.kind === 'npm-script' && t.name === 'crawl'));
   const dep = tools.find((t) => t.kind === 'dep' && t.name === 'prettier');
   assert.ok(dep.tags.has('formatting'));
+});
+
+test('skips generic npm script names (universal noise)', () => {
+  const tools = scanLocalContext(opts({
+    '/proj/package.json': JSON.stringify({ scripts: { test: 'node --test', build: 'tsc', deploy: './deploy.sh' } }),
+  }));
+  assert.equal(tools.some((t) => t.kind === 'npm-script' && t.name === 'test'), false);
+  assert.equal(tools.some((t) => t.kind === 'npm-script' && t.name === 'build'), false);
+  // a non-generic script name is still kept
+  assert.equal(tools.some((t) => t.kind === 'npm-script' && t.name === 'deploy'), true);
 });
 
 test('reads command/skill names from directories', () => {
