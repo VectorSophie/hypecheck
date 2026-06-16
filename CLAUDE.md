@@ -34,7 +34,7 @@ Tests are co-located in `test/*.test.js` and inject a fake `fetchImpl` via the `
 - **Findings drive everything downstream.** To change a verdict, add/adjust a finding in analyze.js, then check `SEVERITY_WEIGHT` and `chooseVerdict` thresholds in score.js — don't special-case verdicts elsewhere.
 - **Time is injectable.** Staleness checks read `options.now` (defaults to `new Date()`); tests pass a fixed date.
 - **Exit codes are contract** (bin/hypecheck.js): `0` INSTALL/TRIAL, `1` SKIP/REDUNDANT/DANGEROUS, `2` bad input, `3` fetch/eval failure. `runCli` is exported and takes injectable `stdout`/`stderr`.
-- The `claude-plugin/` slash command just shells out to `npx hypecheck eval` — it intentionally adds no hooks or background behavior.
+- The `claude-plugin/` slash command just shells out to `npx @jackochesstern/hypecheck eval` — it intentionally adds no hooks or background behavior.
 
 ## Packaging
 

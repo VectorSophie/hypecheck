@@ -84,8 +84,8 @@ Then `/hypecheck <github-url | npm-package | x-link>`.
 ### CLI
 
 ```sh
-npx hypecheck eval @modelcontextprotocol/server-filesystem
-npx hypecheck eval https://github.com/owner/repo --json
+npx @jackochesstern/hypecheck eval @modelcontextprotocol/server-filesystem
+npx @jackochesstern/hypecheck eval https://github.com/owner/repo --json
 ```
 
 `--no-scan` skips the local redundancy scan. `--scan <path>` points it at another project.

@@ -1,15 +1,28 @@
 {
-  "name": "hypecheck",
+  "name": "@jackochesstern/hypecheck",
   "version": "0.1.0",
   "description": "A blunt local-first evaluator for Claude Code and agent/dev tools.",
   "type": "module",
   "bin": {
-    "hypecheck": "./bin/hypecheck.js"
+    "hypecheck": "bin/hypecheck.js"
   },
-  "files": ["bin/", "src/"],
-  "repository": { "type": "git", "url": "git+https://github.com/VectorSophie/hypecheck.git" },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VectorSophie/hypecheck.git"
+  },
   "homepage": "https://github.com/VectorSophie/hypecheck#readme",
-  "keywords": ["claude-code", "mcp", "security", "evaluator", "supply-chain", "cli"],
+  "keywords": [
+    "claude-code",
+    "mcp",
+    "security",
+    "evaluator",
+    "supply-chain",
+    "cli"
+  ],
   "scripts": {
     "test": "node --test"
   },
