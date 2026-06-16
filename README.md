@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/npm/v/hypecheck?style=flat-square&color=111111&label=npm" alt="npm">
+  <img src="https://img.shields.io/npm/v/@jackochesstern/hypecheck?style=flat-square&color=111111&label=npm" alt="npm">
   <img src="https://img.shields.io/badge/node-%3E%3D20-111111?style=flat-square" alt="node >=20">
   <img src="https://img.shields.io/badge/runtime%20deps-0-111111?style=flat-square" alt="zero deps">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT">
