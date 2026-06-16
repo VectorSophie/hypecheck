@@ -36,6 +36,8 @@ Tests are co-located in `test/*.test.js` and inject a fake `fetchImpl` via the `
 - **Exit codes are contract** (bin/hypecheck.js): `0` INSTALL/TRIAL, `1` SKIP/REDUNDANT/DANGEROUS, `2` bad input, `3` fetch/eval failure. `runCli` is exported and takes injectable `stdout`/`stderr`.
 - The `claude-plugin/` slash command just shells out to `npx hypecheck eval` — it intentionally adds no hooks or background behavior.
 
-## Design docs
+## Packaging
 
-`docs/superpowers/specs/` and `docs/superpowers/plans/` hold the original design + MVP plan.
+- `claude-plugin/.claude-plugin/plugin.json` is the plugin manifest; `claude-plugin/commands/hypecheck.md` is auto-discovered as `/hypecheck`.
+- Repo-root `.claude-plugin/marketplace.json` lists the plugin (`source: ./claude-plugin`) so the marketplace installs straight from the GitHub repo.
+- `package.json` `files` ships only `bin/` and `src/` to npm.

@@ -1,58 +1,114 @@
-# Hypecheck
+<h1 align="center">Hypecheck</h1>
 
-Before installing another agent/dev tool, run it through Hypecheck.
+<p align="center">
+  <em>Before you install another agent tool, run it through Hypecheck.</em>
+</p>
 
-Hypecheck is a local-first evaluator for Claude Code plugins, MCP servers, hooks, slash commands, agent workflows, npm packages, and adjacent dev tools. It gives a blunt verdict backed by serious evidence: security risk, maintenance health, setup burden, budget/context pressure, and overkill.
+<p align="center">
+  <img src="https://img.shields.io/npm/v/hypecheck?style=flat-square&color=111111&label=npm" alt="npm">
+  <img src="https://img.shields.io/badge/node-%3E%3D20-111111?style=flat-square" alt="node >=20">
+  <img src="https://img.shields.io/badge/runtime%20deps-0-111111?style=flat-square" alt="zero deps">
+  <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT">
+</p>
 
-## Current MVP
+<p align="center">
+  <strong>A blunt verdict backed by real evidence &middot; local-first &middot; no hosted service</strong>
+</p>
 
-This first slice includes:
+---
 
-- candidate normalization for GitHub, npm, and X/Twitter links
-- public GitHub repository metadata and README fetching
-- npm registry metadata fetching
-- social-link extraction for GitHub/npm links
-- heuristic findings for lifecycle scripts, shell execution dependencies, missing licenses, stale maintenance, secret references, and agent-tooling scope
-- scored JSON and Markdown reports
-- a Claude Code plugin-facing slash command scaffold
+Every week there's a new MCP server, plugin, hook, or skill that will "10x your agent." Some are great. Some are a `postinstall` script and a hook that runs shell commands with your full permissions. You can't tell from the README, and the README is the point.
 
-No hosted service is required.
+Hypecheck reads the repo or package the way a paranoid senior dev would, and hands you one of five verdicts with the evidence stapled to it.
 
-## CLI
+## What it looks like
+
+```text
+$ hypecheck eval https://github.com/some/code-graph-mcp
+
+# Hypecheck: some/code-graph-mcp
+
+Verdict: DANGEROUS
+
+Dangerous. This touches sharp objects and acts casual about it:
+package.json declares lifecycle script(s): prepare.
+
+## Scores
+- Security Risk: 10/10
+- Overkill Index: 100/100
+- Maintenance Health: 8/10
+- Redundancy: 1/10
+
+## Evidence
+- [HIGH] Package lifecycle script: declares prepare.
+- [HIGH] Secret or credential access mentioned in README/metadata.
+- [HIGH] Sensitive hook event: references a PreToolUse hook, which runs
+  shell commands with full user permissions.
+- [LOW]  Agent tooling candidate: affects Claude Code / MCP / hooks / agents.
+```
+
+Exit code is `1`. Your CI can read that.
+
+## The five verdicts
+
+| Verdict | Means |
+|---|---|
+| `INSTALL` | Clear use, acceptable risk, maintained, not redundant. |
+| `TRIAL` | Useful but risky or uncertain — sandbox it, don't install globally. |
+| `SKIP` | Weak fit, weak maintenance, or high setup burden for little payoff. |
+| `REDUNDANT` | You already own this. It names the local tool it duplicates. |
+| `DANGEROUS` | Touches secrets, shell, or hooks and acts casual about it. |
+
+## What it checks
+
+- **Security** — lifecycle scripts, shell-exec deps, secret/credential references, prompt-injection patterns, and hook events that run with your permissions.
+- **Redundancy** — scans your local `.claude/` config, MCP servers, hooks, skills, and npm scripts, and tells you if the candidate just reinvents something you have.
+- **Maintenance** — license, staleness, release recency.
+- **Setup burden & budget pressure** — global installs, tool-call volume, context bloat.
+
+Findings drive everything. No finding, no verdict change.
+
+## Install
+
+### Claude Code
+
+```text
+/plugin marketplace add VectorSophie/hypecheck
+/plugin install hypecheck@hypecheck
+```
+
+Then `/hypecheck <github-url | npm-package | x-link>`.
+
+### CLI
 
 ```sh
-hypecheck eval <github-url | npm-package | npm-url | x-twitter-url>
-hypecheck eval <candidate> --json
+npx hypecheck eval @modelcontextprotocol/server-filesystem
+npx hypecheck eval https://github.com/owner/repo --json
 ```
 
-Examples:
+`--no-scan` skips the local redundancy scan. `--scan <path>` points it at another project.
 
-```sh
-hypecheck eval @modelcontextprotocol/server-filesystem
-hypecheck eval https://github.com/modelcontextprotocol/servers --json
-```
+GitHub's unauthenticated API is 60 requests/hour. Set `GITHUB_TOKEN` to raise it to 5000/hr — Hypecheck reads it from the environment.
 
-Exit codes:
+## Exit codes
 
-- `0`: report generated with `INSTALL` or `TRIAL`
-- `1`: report generated with `SKIP`, `REDUNDANT`, or `DANGEROUS`
-- `2`: invalid command/input
-- `3`: fetch/evaluation failure
+`0` INSTALL/TRIAL · `1` SKIP/REDUNDANT/DANGEROUS · `2` bad input · `3` fetch/eval failure.
 
-## Development
+## Privacy
 
-This repo currently uses Node.js ESM and the built-in Node test runner.
+Local-first. It fetches public metadata for the candidate, and reads your local config to check redundancy. It never reads secret values, never phones home, and never auto-installs anything. The report shows what it scanned and what it couldn't verify.
 
-```sh
-node --test
-```
+## FAQ
 
-The Codex desktop bundled Node runtime can also run the suite directly:
+**Is this a vulnerability scanner?**
+No. `npm audit` and Socket already do CVEs well. Hypecheck answers a different question: should *you* install *this* agent tool, given what you already run?
 
-```powershell
-& 'C:\Users\PC\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' --test
-```
+**Will it catch a truly malicious package?**
+It catches the tells — lifecycle scripts, shell deps, hook events, injection phrasing. It is advisory, not a guarantee. It tells you what it observed, inferred, and couldn't verify, so you decide.
 
-## Claude Code Plugin Scaffold
+**Does the plugin add a hook?**
+No. A security tool that installs background execution to check for background execution would be a funny own goal. The slash command just calls the CLI.
 
-See [`claude-plugin/`](claude-plugin/) for the initial command scaffold. The v1 plugin command invokes the local CLI instead of adding hooks or always-on background behavior.
+## License
+
+[MIT](LICENSE).
