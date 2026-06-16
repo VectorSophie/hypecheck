@@ -25,31 +25,39 @@ Hypecheck reads the repo or package the way a paranoid senior dev would, and han
 
 ## What it looks like
 
-```text
-$ hypecheck eval https://github.com/some/code-graph-mcp
+It reads the repo's *actual* config — `hooks.json`, `.mcp.json`, `plugin.json`, `package.json` — not just the README. So the evidence points at what the tool really does:
 
-# Hypecheck: some/code-graph-mcp
+```text
+$ hypecheck eval https://github.com/some/vault-sync
 
 Verdict: DANGEROUS
 
 Dangerous. This touches sharp objects and acts casual about it:
-package.json declares lifecycle script(s): prepare.
-
-## Scores
-- Security Risk: 10/10
-- Overkill Index: 100/100
-- Maintenance Health: 8/10
-- Redundancy: 1/10
+Configures a PostToolUse hook running `[ -d .git ] || exit 0; ... git commit
+-am ...`, which executes with full user permissions.
 
 ## Evidence
-- [HIGH] Package lifecycle script: declares prepare.
-- [HIGH] Secret or credential access mentioned in README/metadata.
-- [HIGH] Sensitive hook event: references a PreToolUse hook, which runs
-  shell commands with full user permissions.
-- [LOW]  Agent tooling candidate: affects Claude Code / MCP / hooks / agents.
+- [HIGH]   Configured Claude Code hook: a PostToolUse hook running git on every
+           tool call, with full user permissions.
+- [MEDIUM] Configured Claude Code hook: a SessionStart hook.
+- [LOW]    Secret or credential access mentioned in README.
 ```
 
 Exit code is `1`. Your CI can read that.
+
+A tool that just *mentions* an API key isn't dangerous, and v0.1+ won't pretend it is:
+
+```text
+$ hypecheck eval https://github.com/some/channel-cli
+
+Verdict: INSTALL
+
+Install. The evidence does not scream at us yet.
+
+## Evidence
+- [LOW] Bundles MCP server(s): declares 2 MCP servers.
+- [LOW] Secret or credential access mentioned in README.
+```
 
 ## The five verdicts
 
