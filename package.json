@@ -6,6 +6,10 @@
   "bin": {
     "hypecheck": "./bin/hypecheck.js"
   },
+  "files": ["bin/", "src/"],
+  "repository": { "type": "git", "url": "git+https://github.com/VectorSophie/hypecheck.git" },
+  "homepage": "https://github.com/VectorSophie/hypecheck#readme",
+  "keywords": ["claude-code", "mcp", "security", "evaluator", "supply-chain", "cli"],
   "scripts": {
     "test": "node --test"
   },

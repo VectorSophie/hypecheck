@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "hypecheck",
+  "displayName": "Hypecheck",
+  "version": "0.1.0",
+  "description": "Blunt local-first evaluator for Claude Code/agent/dev tools. Verdict + evidence before you install.",
+  "author": { "name": "VectorSophie", "url": "https://github.com/VectorSophie" },
+  "homepage": "https://github.com/VectorSophie/hypecheck",
+  "repository": "https://github.com/VectorSophie/hypecheck",
+  "license": "MIT",
+  "keywords": ["security", "mcp", "evaluator", "supply-chain", "pre-install"]
+}

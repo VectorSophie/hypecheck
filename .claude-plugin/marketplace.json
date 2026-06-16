@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "hypecheck",
+  "description": "Hypecheck: a blunt pre-install evaluator for Claude Code / agent / dev tools.",
+  "owner": { "name": "VectorSophie", "url": "https://github.com/VectorSophie" },
+  "plugins": [
+    {
+      "name": "hypecheck",
+      "source": "./claude-plugin",
+      "description": "Evaluate a GitHub repo, npm package, or X link and get a blunt INSTALL/TRIAL/SKIP/REDUNDANT/DANGEROUS verdict with evidence.",
+      "category": "security",
+      "keywords": ["mcp", "security", "evaluator", "pre-install"]
+    }
+  ]
+}

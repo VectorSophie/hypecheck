@@ -103,6 +103,9 @@ async function fetchSocialCandidate(candidate, fetchImpl) {
 async function fetchJson(fetchImpl, url, headers) {
   const response = await fetchImpl(url, headers ? { headers } : undefined);
   if (!response.ok) {
+    if (response.status === 403 && url.includes('api.github.com')) {
+      throw new Error('GitHub API returned 403 (likely the 60/hr unauthenticated rate limit). Set GITHUB_TOKEN to raise it to 5000/hr.');
+    }
     throw new Error(`Fetch failed for ${url}: ${response.status}`);
   }
   return response.json();

@@ -98,6 +98,14 @@ test('omits the auth header when no token is provided', async () => {
   assert.equal(init.headers.Authorization, undefined);
 });
 
+test('gives a helpful error when GitHub rate-limits (403)', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 403, async json() { return {}; }, async text() { return ''; } });
+  await assert.rejects(
+    fetchCandidateData({ type: 'github', owner: 'o', repo: 'r' }, { fetchImpl }),
+    /GITHUB_TOKEN/,
+  );
+});
+
 test('extracts candidate links from social HTML', () => {
   const links = extractCandidateLinks(`
     <a href="https://github.com/VectorSophie/hypecheck">repo</a>

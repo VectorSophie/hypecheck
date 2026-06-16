@@ -16,4 +16,8 @@ npx hypecheck eval "$ARGUMENTS"
 
 V1 deliberately avoids installing Claude Code hooks. Hypecheck is a security-adjacent evaluator; adding always-on background execution by default would expand the blast radius before the user has even asked a question.
 
-Exact marketplace/plugin manifest packaging is deferred until the Claude Code plugin format is locked for the first packaged release.
+## Packaging
+
+- `.claude-plugin/plugin.json` — this plugin's manifest. `commands/hypecheck.md` is auto-discovered as `/hypecheck`.
+- The repo-root `.claude-plugin/marketplace.json` lists this plugin (`source: ./claude-plugin`), so the marketplace can be added straight from the GitHub repo.
+- `/hypecheck` shells out to `npx hypecheck eval`, which resolves to the published npm package.
