@@ -1,0 +1,16 @@
+{
+  "name": "hypecheck",
+  "version": "0.1.0",
+  "description": "A blunt local-first evaluator for Claude Code and agent/dev tools.",
+  "type": "module",
+  "bin": {
+    "hypecheck": "./bin/hypecheck.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
