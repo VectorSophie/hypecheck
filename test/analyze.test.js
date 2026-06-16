@@ -148,6 +148,14 @@ test('flags a hook-event collision with a local hook on the same event', () => {
   assert.match(f.evidence, /PostToolUse/);
 });
 
+test('flags a command name collision with a local command', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: null, mcp: null }, candidateCommands: ['review', 'deploy'],
+  }, { localTools: [{ kind: 'command', name: 'review', tags: new Set() }] });
+  assert.ok(analysis.findings.some((x) => x.id === 'command-name-collision' && x.evidence.includes('review')));
+});
+
 test('flags an MCP name collision with a local server', () => {
   const analysis = analyzeCandidate({
     source: 'github', metadata: { fullName: 'a/b' }, readme: '',

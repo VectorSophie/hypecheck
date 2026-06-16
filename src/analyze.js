@@ -25,7 +25,7 @@ export function analyzeCandidate(data, options = {}) {
   analyzeText(data.readme ?? data.html ?? '', findings, { manifestHooksFound: hookEvents.length > 0 });
 
   const localTools = options.localTools;
-  if (localTools) analyzeCollisions(hookEvents, mcpServers, localTools, findings);
+  if (localTools) analyzeCollisions(hookEvents, mcpServers, data.candidateCommands ?? [], localTools, findings);
   const redundancy = analyzeRedundancy(data, targetName, localTools, findings);
 
   return {
@@ -34,6 +34,7 @@ export function analyzeCandidate(data, options = {}) {
     targetName,
     findings,
     hasUniqueCapability: redundancy.hasUniqueCapability,
+    scanned: Boolean(localTools),
     unknowns: redundancy.unknowns,
   };
 }
@@ -186,7 +187,7 @@ function analyzeManifests(hookEvents, mcpServers, findings) {
 
 // Cross-reference the candidate's configured surface against what the user
 // already runs locally — "this collides with your workflow."
-function analyzeCollisions(candidateHooks, candidateMcp, localTools, findings) {
+function analyzeCollisions(candidateHooks, candidateMcp, candidateCommands, localTools, findings) {
   const localHookEvents = localTools.filter((t) => t.kind === 'hook' && t.event);
   const candidateEvents = new Set(candidateHooks.map((h) => h.event));
   for (const event of candidateEvents) {
@@ -211,6 +212,19 @@ function analyzeCollisions(candidateHooks, candidateMcp, localTools, findings) {
         category: 'workflow',
         title: 'MCP server name collision',
         evidence: `Registers an MCP server named \`${server.name}\`, which you already have configured locally.`,
+      });
+    }
+  }
+
+  const localCmdNames = new Set(localTools.filter((t) => t.kind === 'command' || t.kind === 'skill').map((t) => t.name));
+  for (const name of candidateCommands) {
+    if (localCmdNames.has(name)) {
+      findings.push({
+        id: 'command-name-collision',
+        severity: 'medium',
+        category: 'workflow',
+        title: 'Command/skill name collision',
+        evidence: `Ships a command/skill named \`${name}\`, which already exists in your setup.`,
       });
     }
   }

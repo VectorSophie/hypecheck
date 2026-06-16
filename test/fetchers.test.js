@@ -33,8 +33,8 @@ test('fetches GitHub repository metadata and README', async () => {
   assert.equal(data.metadata.fullName, 'owner/repo');
   assert.equal(data.readme, 'npm install\npostinstall');
   assert.deepEqual(data.package.scripts, { postinstall: 'x' });
-  // repo + readme + package.json + 3 manifest probes (plugin/hooks/mcp)
-  assert.equal(calls.length, 6);
+  // repo + readme + package.json + 3 manifests + 4 command/skill dir probes
+  assert.equal(calls.length, 10);
 });
 
 test('GitHub fetch tolerates a missing package.json', async () => {
@@ -45,6 +45,17 @@ test('GitHub fetch tolerates a missing package.json', async () => {
   const data = await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
   assert.equal(data.package, null);
   assert.deepEqual(data.manifests, { plugin: null, hooks: null, mcp: null });
+});
+
+test('GitHub fetch lists candidate command and skill names', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r' });
+    if (url.endsWith('/contents/commands')) return jsonResponse([{ name: 'review.md', type: 'file' }, { name: 'deploy.md', type: 'file' }]);
+    if (url.endsWith('/contents/skills')) return jsonResponse([{ name: 'lint-it', type: 'dir' }]);
+    return jsonResponse(null, false);
+  };
+  const data = await fetchCandidateData({ type: 'github', owner: 'o', repo: 'r' }, { fetchImpl });
+  assert.deepEqual(data.candidateCommands.sort(), ['deploy', 'lint-it', 'review']);
 });
 
 test('GitHub fetch attaches parsed manifests', async () => {
@@ -91,6 +102,16 @@ test('fetches npm metadata and extracts package signals', async () => {
   assert.deepEqual(signals.lifecycleScripts, ['postinstall']);
   assert.deepEqual(signals.dependencies, ['cross-spawn']);
   assert.deepEqual(signals.bins, ['execa']);
+});
+
+test('npm fetch captures maintainer names without leaking emails', async () => {
+  const fetchImpl = async () => jsonResponse({
+    name: 'p', 'dist-tags': { latest: '1.0.0' }, time: { '1.0.0': '2026-01-01T00:00:00Z' },
+    versions: { '1.0.0': {} }, maintainers: [{ name: 'alice', email: 'alice@secret.com' }, { name: 'bob', email: 'bob@x.com' }],
+  });
+  const data = await fetchCandidateData({ type: 'npm', packageName: 'p' }, { fetchImpl });
+  assert.deepEqual(data.metadata.maintainers, ['alice', 'bob']);
+  assert.ok(!JSON.stringify(data.metadata).includes('secret.com'));
 });
 
 test('sends a User-Agent and GITHUB_TOKEN auth header to the GitHub API', async () => {

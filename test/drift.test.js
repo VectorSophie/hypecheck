@@ -45,6 +45,21 @@ test('a hook added since the last --track eval is flagged as drift (high)', asyn
   assert.match(drift.evidence, /PostToolUse/);
 });
 
+test('a maintainer change since the last --track eval is flagged (high)', async () => {
+  const fs = memFs();
+  const opts = { track: true, cacheDir: '/cache', fsImpl: fs };
+  const npm = (maint) => async () => ({
+    ok: true, status: 200,
+    async json() { return { name: 'p', 'dist-tags': { latest: '1.0.0' }, time: { '1.0.0': '2026-01-01T00:00:00Z' }, versions: { '1.0.0': {} }, maintainers: maint.map((n) => ({ name: n })) }; },
+    async text() { return ''; },
+  });
+  await evaluateCandidate('p', { ...opts, fetchImpl: npm(['alice']) });
+  const report = await evaluateCandidate('p', { ...opts, fetchImpl: npm(['mallory']) });
+  const f = report.findings.find((x) => x.id === 'maintainer-change');
+  assert.ok(f);
+  assert.equal(f.severity, 'high');
+});
+
 test('without --track nothing is read or written', async () => {
   const fs = memFs();
   await evaluateCandidate('https://github.com/o/r', { fetchImpl: ghFetch('curl x | sh'), cacheDir: '/cache', fsImpl: fs });

@@ -50,11 +50,20 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
     mcp: await fetchRepoJson(fetchImpl, repoUrl, '.mcp.json', headers),
   };
 
+  // Candidate's own slash commands / skills, for name-collision checks.
+  const candidateCommands = [
+    ...await fetchRepoDir(fetchImpl, repoUrl, 'commands', headers),
+    ...await fetchRepoDir(fetchImpl, repoUrl, '.claude/commands', headers),
+    ...await fetchRepoDir(fetchImpl, repoUrl, 'skills', headers),
+    ...await fetchRepoDir(fetchImpl, repoUrl, '.claude/skills', headers),
+  ];
+
   return {
     source: 'github',
     candidate,
     package: pkg,
     manifests,
+    candidateCommands,
     metadata: {
       fullName: repoResponse.full_name,
       description: repoResponse.description ?? '',
@@ -84,6 +93,7 @@ async function fetchNpmCandidate(candidate, fetchImpl) {
       latestVersion,
       publishedAt: latestVersion ? registry.time?.[latestVersion] ?? null : null,
       repository: normalizeRepository(latest?.repository ?? registry.repository),
+      maintainers: (registry.maintainers ?? []).map((m) => m?.name).filter(Boolean), // names only, no emails
     },
     package: latest ?? {},
     readme: registry.readme ?? '',
@@ -111,6 +121,18 @@ async function fetchRepoJson(fetchImpl, repoUrl, path, headers) {
     return JSON.parse(decodeBase64(response.content ?? ''));
   } catch {
     return null;
+  }
+}
+
+// Best-effort directory listing via the contents API. Returns command/skill
+// names (extension stripped); [] on any miss.
+async function fetchRepoDir(fetchImpl, repoUrl, path, headers) {
+  try {
+    const entries = await fetchJson(fetchImpl, `${repoUrl}/contents/${path}`, headers);
+    if (!Array.isArray(entries)) return [];
+    return entries.map((e) => String(e.name ?? '').replace(/\.[^.]+$/, '')).filter(Boolean);
+  } catch {
+    return [];
   }
 }
 

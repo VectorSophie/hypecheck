@@ -18,15 +18,20 @@ export function computeFingerprint(data) {
   return {
     hooks: extractHookEvents(data.manifests).map((h) => `${h.event}:${h.command}`).sort(),
     mcp: extractMcpServers(data.manifests).map((s) => s.name).sort(),
+    maintainers: [...(data.metadata?.maintainers ?? [])].sort(),
     version: data.metadata?.latestVersion ?? data.metadata?.version ?? null,
   };
 }
 
 export function diffFingerprint(prior, current) {
   const added = (a, b) => b.filter((x) => !a.includes(x));
+  const priorMaint = prior.maintainers ?? [];
+  const curMaint = current.maintainers ?? [];
   return {
     addedHooks: added(prior.hooks ?? [], current.hooks ?? []),
     addedMcp: added(prior.mcp ?? [], current.mcp ?? []),
+    addedMaintainers: added(priorMaint, curMaint),
+    removedMaintainers: added(curMaint, priorMaint),
     versionChanged: prior.version !== current.version,
   };
 }

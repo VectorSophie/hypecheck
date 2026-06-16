@@ -71,6 +71,26 @@ export const FINDING_DOCS = {
     why: 'the candidate registers an MCP server name you already use locally; one may shadow the other.',
     verify: 'check your local .mcp.json / ~/.claude.json for the named server.',
   },
+  'command-name-collision': {
+    why: 'the candidate ships a slash command or skill whose name you already use; one may shadow the other.',
+    verify: 'check your local .claude/commands and .claude/skills for the named entry.',
+  },
+  'maintainer-change': {
+    why: 'the package maintainer set changed since you last vetted it — a common rug-pull precursor (ownership transfer before a malicious release).',
+    verify: 'check the npm maintainers / recent ownership changes and whether the new maintainer is trusted.',
+  },
+  'local-redundancy': {
+    why: 'you already run multiple local tools covering the same capability — maintenance overhead with no added value.',
+    verify: 'review the named local tools and drop the ones you no longer use.',
+  },
+  'local-hook-collision': {
+    why: 'you have multiple hooks on one event; they all fire in config order, which can cause ordering surprises or conflicts.',
+    verify: 'open your .claude settings and review the hooks on that event.',
+  },
+  'local-risky-hook': {
+    why: 'a hook you already run executes a shell command with full permissions; worth knowing what is already wired into your setup.',
+    verify: 'read the hook command in your .claude settings and confirm you trust it.',
+  },
   'drift-detected': {
     why: 'the candidate changed its executable surface since you last vetted it — the rug-pull / post-audit-swap attack class.',
     verify: 're-read the changed hook/MCP config and diff it against what you approved before.',

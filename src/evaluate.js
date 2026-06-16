@@ -36,8 +36,20 @@ function applyDrift(candidate, data, analysis, options) {
   writeRecord(candidate.canonical, { date: new Date().toISOString(), version: current.version, fingerprint: current }, cacheOpts);
 }
 
-function driftFinding({ addedHooks, addedMcp, versionChanged }, oldVersion, newVersion) {
+function driftFinding({ addedHooks, addedMcp, addedMaintainers = [], removedMaintainers = [], versionChanged }, oldVersion, newVersion) {
   const ver = versionChanged ? ` (${oldVersion ?? '?'} -> ${newVersion ?? '?'})` : '';
+  if (addedMaintainers.length || removedMaintainers.length) {
+    const parts = [];
+    if (addedMaintainers.length) parts.push(`added ${addedMaintainers.join(', ')}`);
+    if (removedMaintainers.length) parts.push(`removed ${removedMaintainers.join(', ')}`);
+    return {
+      id: 'maintainer-change',
+      severity: 'high',
+      category: 'security',
+      title: 'Package maintainers changed since last vetting',
+      evidence: `Maintainers changed${ver}: ${parts.join('; ')}. A common rug-pull precursor — re-review before trusting.`,
+    };
+  }
   if (addedHooks.length || addedMcp.length) {
     const parts = [
       ...addedHooks.map((h) => `hook ${h.split(':')[0]}`),

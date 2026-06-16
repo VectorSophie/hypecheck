@@ -96,11 +96,13 @@ npx @jackochesstern/hypecheck eval @modelcontextprotocol/server-filesystem
 npx @jackochesstern/hypecheck eval https://github.com/owner/repo --json
 npx @jackochesstern/hypecheck compare owner/repo-a owner/repo-b
 npx @jackochesstern/hypecheck explain configured-hook
+npx @jackochesstern/hypecheck audit
 ```
 
 - `eval` — score one candidate. `--no-scan` skips the local redundancy/collision scan; `--scan <path>` points it at another project.
 - `compare A B` — evaluate two candidates side by side.
 - `explain <finding-id>` — why a finding matters and how to verify it yourself.
+- `audit` — turn the lens on *your own* installed setup: redundant tools, hook collisions, and risky hooks you're already running.
 - `--track` (on `eval`) — opt-in. Caches the candidate's public surface to `~/.hypecheck/` and, on the next `--track` run, flags **drift**: hooks or MCP servers added since you last vetted it (the rug-pull case). Off by default; reads/writes nothing without it, and never stores your config or secrets.
 
 It also cross-references the candidate's hooks/MCP servers against your local `.claude` config and flags **collisions** — "adds a PostToolUse hook; you already run 2 on that event."
@@ -119,6 +121,9 @@ Local-first. It fetches public metadata for the candidate, and reads your local 
 
 **Is this a vulnerability scanner?**
 No. `npm audit` and Socket already do CVEs well. Hypecheck answers a different question: should *you* install *this* agent tool, given what you already run?
+
+**How is this different from SkillSpector / Vexscan?**
+Those scan a plugin's code for malware patterns in isolation, and go deeper than Hypecheck on raw detection. Hypecheck is **context-aware**: it checks the candidate against *your* setup — redundancy, hook/MCP/command collisions, and drift since you last vetted it. A pattern scanner doesn't know what you already run. Different question, complementary tool.
 
 **Will it catch a truly malicious package?**
 It catches the tells — lifecycle scripts, shell deps, hook events, injection phrasing. It is advisory, not a guarantee. It tells you what it observed, inferred, and couldn't verify, so you decide.

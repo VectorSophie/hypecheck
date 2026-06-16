@@ -9,7 +9,8 @@ try { process.loadEnvFile(); } catch { /* no .env or unsupported runtime */ }
 
 import { evaluateCandidate } from '../src/evaluate.js';
 import { scanLocalContext } from '../src/local-context.js';
-import { renderMarkdownReport, renderComparison } from '../src/report.js';
+import { auditSetup } from '../src/audit.js';
+import { renderMarkdownReport, renderComparison, renderAudit } from '../src/report.js';
 import { explainFinding, FINDING_DOCS } from '../src/finding-docs.js';
 
 const NEGATIVE = new Set(['SKIP', 'REDUNDANT', 'DANGEROUS']);
@@ -28,6 +29,7 @@ export async function runCli(argv, options = {}) {
   if (command === 'eval') return cmdEval(args, options, stdout, stderr);
   if (command === 'compare') return cmdCompare(args, options, stdout, stderr);
   if (command === 'explain') return cmdExplain(args, stdout, stderr);
+  if (command === 'audit') return cmdAudit(args, options, stdout);
 
   stderr(`Unknown command: ${command}\n\n${usage()}`);
   return 2;
@@ -78,6 +80,13 @@ async function cmdCompare(args, options, stdout, stderr) {
     stderr(`${error.message}\n`);
     return 3;
   }
+}
+
+function cmdAudit(args, options, stdout) {
+  const localTools = resolveLocalTools(args, options) ?? [];
+  const findings = auditSetup(localTools);
+  stdout(renderAudit(findings));
+  return findings.some((f) => f.severity === 'high') ? 1 : 0;
 }
 
 function cmdExplain(args, stdout, stderr) {

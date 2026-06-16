@@ -49,7 +49,8 @@ export function scanLocalContext({ cwd, home, fs } = {}) {
     for (const [event, matchers] of Object.entries(json.hooks ?? {})) {
       for (const entry of Array.isArray(matchers) ? matchers : []) {
         const name = entry?.matcher ?? 'hook';
-        tools.push({ kind: 'hook', event, name, tags: tagCapabilities(name) });
+        const command = (entry?.hooks ?? []).map((h) => h?.command ?? '').filter(Boolean).join('; ');
+        tools.push({ kind: 'hook', event, name, command, tags: tagCapabilities(name) });
       }
     }
   };

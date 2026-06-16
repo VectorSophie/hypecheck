@@ -6,6 +6,10 @@ export function renderMarkdownReport(report) {
     '',
     report.summary,
     '',
+    ...(report.scanned ? [report.hasUniqueCapability
+      ? 'Fit: adds capability your current setup does not obviously cover.'
+      : 'Fit: overlaps tools you already run — little net-new capability.', '']
+      : []),
     '## Scores',
     '',
     `- Workflow Fit: ${report.scores.workflowFit}/10`,
@@ -44,6 +48,18 @@ const SCORE_ROWS = [
   ['Workflow Fit', 'workflowFit'], ['Redundancy', 'redundancy'], ['Security Risk', 'securityRisk'],
   ['Maintenance Health', 'maintenanceHealth'], ['Setup Burden', 'setupBurden'], ['Budget/Context', 'budgetPressure'],
 ];
+
+export function renderAudit(findings) {
+  const lines = ['# Hypecheck audit: your installed setup', ''];
+  if (findings.length === 0) {
+    lines.push('No redundancy, hook collisions, or risky hooks found in your local config.');
+  } else {
+    for (const f of findings) {
+      lines.push(`- [${f.severity.toUpperCase()}] ${f.title}: ${f.evidence}`);
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}
 
 export function renderComparison(a, b) {
   const lines = [
