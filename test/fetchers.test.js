@@ -33,16 +33,33 @@ test('fetches GitHub repository metadata and README', async () => {
   assert.equal(data.metadata.fullName, 'owner/repo');
   assert.equal(data.readme, 'npm install\npostinstall');
   assert.deepEqual(data.package.scripts, { postinstall: 'x' });
-  assert.equal(calls.length, 3);
+  // repo + readme + package.json + 3 manifest probes (plugin/hooks/mcp)
+  assert.equal(calls.length, 6);
 });
 
 test('GitHub fetch tolerates a missing package.json', async () => {
   const fetchImpl = async (url) => {
     if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo' });
-    return jsonResponse(null, false); // readme + package.json both 404
+    return jsonResponse(null, false); // everything else 404
   };
   const data = await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
   assert.equal(data.package, null);
+  assert.deepEqual(data.manifests, { plugin: null, hooks: null, mcp: null });
+});
+
+test('GitHub fetch attaches parsed manifests', async () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo' });
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) return jsonResponse({ content: b64({ name: 'p' }) });
+    if (url.endsWith('/contents/hooks/hooks.json')) return jsonResponse({ content: b64({ hooks: { PreToolUse: [] } }) });
+    if (url.endsWith('/contents/.mcp.json')) return jsonResponse({ content: b64({ mcpServers: {} }) });
+    return jsonResponse(null, false);
+  };
+  const data = await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
+  assert.equal(data.manifests.plugin.name, 'p');
+  assert.ok(data.manifests.hooks.hooks.PreToolUse);
+  assert.deepEqual(data.manifests.mcp.mcpServers, {});
 });
 
 test('fetches npm metadata and extracts package signals', async () => {

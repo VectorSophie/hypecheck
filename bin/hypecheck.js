@@ -2,6 +2,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+
+// Pick up GITHUB_TOKEN (and friends) from a local .env without --env-file.
+// Node >=20.12; older runtimes simply skip it.
+try { process.loadEnvFile(); } catch { /* no .env or unsupported runtime */ }
+
 import { evaluateCandidate } from '../src/evaluate.js';
 import { scanLocalContext } from '../src/local-context.js';
 import { renderMarkdownReport } from '../src/report.js';

@@ -40,18 +40,21 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
 
   // Best-effort: pull package.json for lifecycle/shell parity with npm. Many
   // repos won't have one (or it's nested) — a miss is fine, not an error.
-  let pkg = null;
-  try {
-    const pkgResponse = await fetchJson(fetchImpl, `${repoUrl}/contents/package.json`, headers);
-    pkg = JSON.parse(decodeBase64(pkgResponse.content ?? ''));
-  } catch {
-    pkg = null;
-  }
+  const pkg = await fetchRepoJson(fetchImpl, repoUrl, 'package.json', headers);
+
+  // Real agent-tool config: hooks, MCP servers, plugin manifest. Drives the
+  // precise risk findings instead of regex over the README.
+  const manifests = {
+    plugin: await fetchRepoJson(fetchImpl, repoUrl, '.claude-plugin/plugin.json', headers),
+    hooks: await fetchRepoJson(fetchImpl, repoUrl, 'hooks/hooks.json', headers),
+    mcp: await fetchRepoJson(fetchImpl, repoUrl, '.mcp.json', headers),
+  };
 
   return {
     source: 'github',
     candidate,
     package: pkg,
+    manifests,
     metadata: {
       fullName: repoResponse.full_name,
       description: repoResponse.description ?? '',
@@ -98,6 +101,17 @@ async function fetchSocialCandidate(candidate, fetchImpl) {
     candidate,
     html: await response.text(),
   };
+}
+
+// Best-effort fetch of a JSON file from the repo's default branch. Returns null
+// on any miss (404, not-JSON, etc.) — these files are optional.
+async function fetchRepoJson(fetchImpl, repoUrl, path, headers) {
+  try {
+    const response = await fetchJson(fetchImpl, `${repoUrl}/contents/${path}`, headers);
+    return JSON.parse(decodeBase64(response.content ?? ''));
+  } catch {
+    return null;
+  }
 }
 
 async function fetchJson(fetchImpl, url, headers) {

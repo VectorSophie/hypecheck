@@ -72,6 +72,21 @@ test('clean positive verdict with only a low finding stays terse', () => {
   assert.doesNotMatch(scored.summary, /Worth a closer look/);
 });
 
+test('a configured tool-call hook running a shell pipe reaches DANGEROUS', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'configured-hook', category: 'security', severity: 'high', title: 't', evidence: 'PostToolUse hook' },
+    { id: 'shell-in-hook', category: 'security', severity: 'high', title: 't', evidence: 'curl | sh' },
+  ]));
+  assert.equal(scored.verdict, 'DANGEROUS');
+});
+
+test('a bare README secret mention alone cannot reach DANGEROUS', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'secret-reference', category: 'security', severity: 'low', title: 't', evidence: 'mentions .env' },
+  ]));
+  assert.notEqual(scored.verdict, 'DANGEROUS');
+});
+
 test('roast summary still works with no findings', () => {
   const scored = scoreAnalysis(base([]));
   assert.equal(typeof scored.summary, 'string');
