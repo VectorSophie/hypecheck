@@ -73,6 +73,7 @@ Install. The evidence does not scream at us yet.
 
 - **Security** — lifecycle scripts, shell-exec deps, secret/credential references, prompt-injection patterns, and hook events that run with your permissions.
 - **Redundancy** — scans your local `.claude/` config, MCP servers, hooks, skills, and npm scripts, and tells you if the candidate just reinvents something you have.
+- **Stack fit** — reads your permissions allowlist and project manifests (known locations only) to learn your stack, then notes whether the candidate targets it. *"Stack fit: targets Rust, which your setup doesn't show."* Advisory — it nudges the Workflow Fit score, never the verdict.
 - **Maintenance** — license, staleness, release recency.
 - **Setup burden & budget pressure** — global installs, tool-call volume, context bloat.
 

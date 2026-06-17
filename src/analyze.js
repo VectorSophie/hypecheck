@@ -1,5 +1,6 @@
 import { extractPackageSignals, extractHookEvents, extractMcpServers } from './extractors.js';
 import { tagCapabilities, matchStrength } from './capabilities.js';
+import { tagTech } from './profile.js';
 
 const SHELL_DEPS = new Set(['execa', 'shelljs', 'zx', 'cross-spawn', 'child_process']);
 // Hook events that run on tool calls / prompts execute with full user permissions.
@@ -35,8 +36,24 @@ export function analyzeCandidate(data, options = {}) {
     findings,
     hasUniqueCapability: redundancy.hasUniqueCapability,
     scanned: Boolean(localTools),
+    fit: computeFit(data, targetName, options.userProfile),
     unknowns: redundancy.unknowns,
   };
+}
+
+// Stack fit: does the candidate target a stack the user actually works in?
+// A weak, advisory signal — never a verdict driver (chooseVerdict ignores it).
+function computeFit(data, targetName, userProfile) {
+  const userTech = userProfile?.techTags;
+  if (!userTech || userTech.size === 0) return { signal: 'none' };
+
+  const candidateText = `${targetName} ${data.metadata?.language ?? ''} ${data.metadata?.description ?? ''} ${data.readme ?? data.html ?? ''}`;
+  const candidateTech = tagTech(candidateText);
+  if (candidateTech.size === 0) return { signal: 'none' };
+
+  const matched = [...candidateTech].filter((t) => userTech.has(t));
+  if (matched.length > 0) return { signal: 'match', tags: matched };
+  return { signal: 'mismatch', tags: [...candidateTech] };
 }
 
 function analyzeRedundancy(data, targetName, localTools, findings) {

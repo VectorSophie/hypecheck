@@ -9,6 +9,7 @@ try { process.loadEnvFile(); } catch { /* no .env or unsupported runtime */ }
 
 import { evaluateCandidate } from '../src/evaluate.js';
 import { scanLocalContext } from '../src/local-context.js';
+import { profileUser } from '../src/profile.js';
 import { auditSetup } from '../src/audit.js';
 import { renderMarkdownReport, renderComparison, renderAudit } from '../src/report.js';
 import { explainFinding, FINDING_DOCS } from '../src/finding-docs.js';
@@ -35,26 +36,29 @@ export async function runCli(argv, options = {}) {
   return 2;
 }
 
-function resolveLocalTools(args, options) {
-  if (removeFlag(args, '--no-scan')) return undefined;
-  return scanLocalContext({
+// Resolves the shared local scan once: tools (redundancy/collision) and the
+// stack profile (fit) both read the same cwd/home/fs. --no-scan disables both.
+function resolveScan(args, options) {
+  if (removeFlag(args, '--no-scan')) return { localTools: undefined, userProfile: undefined };
+  const scan = {
     cwd: removeOption(args, '--scan') ?? options.scanCwd ?? process.cwd(),
     home: options.scanHome ?? os.homedir(),
     fs: options.fsImpl ?? fs,
-  });
+  };
+  return { localTools: scanLocalContext(scan), userProfile: profileUser(scan) };
 }
 
 async function cmdEval(args, options, stdout, stderr) {
   const json = removeFlag(args, '--json');
   const track = removeFlag(args, '--track');
-  const localTools = resolveLocalTools(args, options);
+  const { localTools, userProfile } = resolveScan(args, options);
   const candidate = args.join(' ').trim();
   if (!candidate) {
     stderr(`Candidate is required.\n\n${usage()}`);
     return 2;
   }
   try {
-    const report = await evaluateCandidate(candidate, { ...options, localTools, track });
+    const report = await evaluateCandidate(candidate, { ...options, localTools, userProfile, track });
     stdout(json ? `${JSON.stringify(report, null, 2)}\n` : renderMarkdownReport(report));
     return NEGATIVE.has(report.verdict) ? 1 : 0;
   } catch (error) {
@@ -65,15 +69,15 @@ async function cmdEval(args, options, stdout, stderr) {
 
 async function cmdCompare(args, options, stdout, stderr) {
   const json = removeFlag(args, '--json');
-  const localTools = resolveLocalTools(args, options);
+  const { localTools, userProfile } = resolveScan(args, options);
   const [a, b] = args;
   if (!a || !b) {
     stderr(`compare needs two candidates.\n\n${usage()}`);
     return 2;
   }
   try {
-    const ra = await evaluateCandidate(a, { ...options, localTools });
-    const rb = await evaluateCandidate(b, { ...options, localTools });
+    const ra = await evaluateCandidate(a, { ...options, localTools, userProfile });
+    const rb = await evaluateCandidate(b, { ...options, localTools, userProfile });
     stdout(json ? `${JSON.stringify({ a: ra, b: rb }, null, 2)}\n` : renderComparison(ra, rb));
     return (NEGATIVE.has(ra.verdict) || NEGATIVE.has(rb.verdict)) ? 1 : 0;
   } catch (error) {
@@ -83,7 +87,7 @@ async function cmdCompare(args, options, stdout, stderr) {
 }
 
 function cmdAudit(args, options, stdout) {
-  const localTools = resolveLocalTools(args, options) ?? [];
+  const localTools = resolveScan(args, options).localTools ?? [];
   const findings = auditSetup(localTools);
   stdout(renderAudit(findings));
   return findings.some((f) => f.severity === 'high') ? 1 : 0;

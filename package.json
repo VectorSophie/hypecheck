@@ -1,6 +1,6 @@
 {
   "name": "@jackochesstern/hypecheck",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A blunt local-first evaluator for Claude Code and agent/dev tools.",
   "type": "module",
   "bin": {

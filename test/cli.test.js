@@ -120,6 +120,33 @@ test('CLI --no-scan skips local context', async () => {
   assert.match(parsed.unknowns.join(' '), /not scanned/i);
 });
 
+test('CLI derives a stack profile from local config and notes mismatch', async () => {
+  const output = [];
+  const fs = {
+    readFileSync: (p) => {
+      if (p === '/proj/.claude/settings.json') return JSON.stringify({ permissions: { allow: ['Bash(cargo:*)'] } });
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+    readdirSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  await runCli(['eval', 'some-ts-tool', '--json'], {
+    now: new Date('2026-06-15T00:00:00Z'),
+    stdout: (t) => output.push(t),
+    stderr: () => {},
+    scanCwd: '/proj',
+    scanHome: '/home',
+    fsImpl: fs,
+    fetchImpl: async () => jsonResponse({
+      name: 'some-ts-tool', license: 'MIT',
+      'dist-tags': { latest: '1.0.0' }, time: { '1.0.0': '2026-06-01T00:00:00Z' },
+      versions: { '1.0.0': {} }, readme: 'A typescript library for your tsconfig.',
+    }),
+  });
+  const parsed = JSON.parse(output.join(''));
+  assert.equal(parsed.fit.signal, 'mismatch');
+  assert.ok(parsed.fit.tags.includes('ts'));
+});
+
 function jsonResponse(body) {
   return {
     ok: true,

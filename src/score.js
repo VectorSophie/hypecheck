@@ -13,8 +13,10 @@ export function scoreAnalysis(analysis) {
   const strongOverlaps = analysis.findings.filter((f) => f.category === 'redundancy' && f.strength === 'strong').length;
   const weakOverlaps = analysis.findings.filter((f) => f.category === 'redundancy' && f.strength === 'weak').length;
 
+  const fitNudge = analysis.fit?.signal === 'match' ? 2 : analysis.fit?.signal === 'mismatch' ? -2 : 0;
+
   const scores = {
-    workflowFit: clamp(4 + workflowPoints, 1, 10),
+    workflowFit: clamp(4 + workflowPoints + fitNudge, 1, 10),
     redundancy: clamp(1 + 3 * strongOverlaps + weakOverlaps, 1, 10),
     securityRisk: clamp(securityPoints + 2, 1, 10),
     maintenanceHealth: clamp(8 - maintenancePoints, 1, 10),

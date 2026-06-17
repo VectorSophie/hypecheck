@@ -224,3 +224,19 @@ test('renders markdown report with verdict, scores, and evidence', () => {
   assert.match(markdown, /package\.json declares postinstall/);
   assert.match(markdown, /No local Claude Code context was scanned/);
 });
+
+test('renders a stack-fit note when the fit signal is set', () => {
+  const base = {
+    targetName: 'rust-tool', verdict: 'INSTALL', summary: 'Install.',
+    scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 0 },
+    confidence: 'low', findings: [], unknowns: [],
+  };
+  const match = renderMarkdownReport({ ...base, fit: { signal: 'match', tags: ['rust'] } });
+  assert.match(match, /Stack fit: matches your .*rust/);
+
+  const mismatch = renderMarkdownReport({ ...base, fit: { signal: 'mismatch', tags: ['rust'] } });
+  assert.match(mismatch, /Stack fit:.*rust.*your setup doesn't show/i);
+
+  const none = renderMarkdownReport({ ...base, fit: { signal: 'none' } });
+  assert.doesNotMatch(none, /Stack fit:/);
+});

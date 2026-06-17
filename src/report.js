@@ -10,6 +10,7 @@ export function renderMarkdownReport(report) {
       ? 'Fit: adds capability your current setup does not obviously cover.'
       : 'Fit: overlaps tools you already run — little net-new capability.', '']
       : []),
+    ...stackFitLines(report.fit),
     '## Scores',
     '',
     `- Workflow Fit: ${report.scores.workflowFit}/10`,
@@ -42,6 +43,14 @@ export function renderMarkdownReport(report) {
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+// Advisory stack-fit note (weak signal): only shown when the profile produced one.
+function stackFitLines(fit) {
+  if (!fit || fit.signal === 'none') return [];
+  const tags = (fit.tags ?? []).join(', ');
+  if (fit.signal === 'match') return [`Stack fit: matches your ${tags} setup.`, ''];
+  return [`Stack fit: targets ${tags}, which your setup doesn't show.`, ''];
 }
 
 const SCORE_ROWS = [
