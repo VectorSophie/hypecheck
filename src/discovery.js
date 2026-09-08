@@ -103,6 +103,10 @@ async function walkShallow(request, repoUrl, defaultBranch, subpath, budget, ski
   while (queue.length > 0) {
     const node = queue.shift();
 
+    if (node.depth > BOUNDS.maxDepth) {
+      skipped.push({ path: node.prefix, reason: 'depth' });
+      continue;
+    }
     if (budget.requests >= BOUNDS.maxRequests) {
       skipped.push({ path: node.prefix, reason: 'requests' });
       continue;

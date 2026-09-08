@@ -183,8 +183,30 @@ test('discoverTree stops issuing requests once the request bound is hit', async 
   let calls = 0;
   const fetchImpl = async (url) => {
     calls += 1;
-    // Every directory has one interesting file and one subdirectory, so an
-    // unbounded walk would run forever.
+    if (url === 'https://api.github.com/repos/o/r/git/trees/main') {
+      // 100 sibling subdirectories at depth 1 — far more than the request
+      // budget can fully expand, but well within the depth bound.
+      return jsonResponse({
+        tree: Array.from({ length: 100 }, (_, i) => ({ path: `d${i}`, type: 'tree', sha: `sha-d${i}` })),
+      });
+    }
+    // Each depth-1 directory has one interesting file and no further subdirectories.
+    return jsonResponse({ tree: [{ path: 'hooks.json', type: 'blob', size: 10 }] });
+  };
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 999_999, subpath: '',
+  });
+
+  assert.equal(calls, BOUNDS.maxRequests);
+  assert.ok(result.skipped.some((s) => s.reason === 'requests'));
+  assert.ok(result.skipped.every((s) => s.reason !== 'depth'), 'this fixture should never hit the depth bound — all nodes are at depth <= 1');
+});
+
+test('discoverTree halts shallow-mode traversal at the depth bound, without burning the request budget', async () => {
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    calls += 1;
     const depth = (url.match(/\/d/g) ?? []).length;
     return jsonResponse({ tree: [
       { path: `hooks-${depth}.json`, type: 'blob', size: 10 },
@@ -196,6 +218,9 @@ test('discoverTree stops issuing requests once the request bound is hit', async 
     defaultBranch: 'main', repoSizeKb: 999_999, subpath: '',
   });
 
-  assert.equal(calls, BOUNDS.maxRequests);
-  assert.ok(result.skipped.some((s) => s.reason === 'requests'));
+  // Root (depth 0) through depth 6 = 7 directory levels processed = 7 requests,
+  // then the depth-7 node is skipped without ever being fetched.
+  assert.equal(calls, 7);
+  assert.ok(calls < BOUNDS.maxRequests, 'depth bound must stop the walk well before the request bound is reached');
+  assert.ok(result.skipped.some((s) => s.reason === 'depth'));
 });
