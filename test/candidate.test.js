@@ -90,3 +90,22 @@ test('plain owner/repo has no subpath field', () => {
   const result = normalizeCandidate('VectorSophie/hypecheck');
   assert.equal('subpath' in result, false);
 });
+
+test('decodes percent-encoded segments in a GitHub tree URL subpath', () => {
+  assert.deepEqual(normalizeCandidate('https://github.com/o/r/tree/main/my%20plugin/shunt'), {
+    type: 'github',
+    original: 'https://github.com/o/r/tree/main/my%20plugin/shunt',
+    owner: 'o',
+    repo: 'r',
+    canonical: 'https://github.com/o/r',
+    subpath: 'my plugin/shunt',
+  });
+});
+
+test('does not throw on a malformed percent-encoded fragment subpath', () => {
+  let result;
+  assert.doesNotThrow(() => {
+    result = normalizeCandidate('https://github.com/o/r#%zz');
+  });
+  assert.equal(result.subpath, '%zz');
+});

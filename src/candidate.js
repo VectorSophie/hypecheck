@@ -40,9 +40,9 @@ function normalizeUrlCandidate(original, url) {
     if (pathParts[2] === 'tree' && pathParts.length > 4) {
       // /owner/repo/tree/<ref>/<subpath...> — ref is read but ignored; we
       // always evaluate the default branch.
-      subpath = pathParts.slice(4).join('/');
+      subpath = pathParts.slice(4).map((part) => decodeSubpathSegment(part)).join('/');
     } else if (url.hash && url.hash.length > 1) {
-      subpath = decodeURIComponent(url.hash.slice(1));
+      subpath = decodeSubpathSegment(url.hash.slice(1));
     }
 
     return githubCandidate(original, owner, repo, subpath);
@@ -106,6 +106,14 @@ function tryUrl(value) {
 
 function stripGitSuffix(repo) {
   return repo.endsWith('.git') ? repo.slice(0, -4) : repo;
+}
+
+function decodeSubpathSegment(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function isLikelyNpmName(value) {
