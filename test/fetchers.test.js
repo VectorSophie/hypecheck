@@ -126,14 +126,22 @@ test('sends a User-Agent and GITHUB_TOKEN auth header to the GitHub API', async 
 });
 
 test('omits the auth header when no token is provided', async () => {
-  let init;
-  const fetchImpl = async (url, opts) => {
-    init = opts;
-    return jsonResponse({ full_name: 'owner/repo' });
-  };
-  await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
-  assert.ok(init.headers['User-Agent']);
-  assert.equal(init.headers.Authorization, undefined);
+  // Isolate from the dev machine's own env — a real GITHUB_TOKEN set in the
+  // shell must never leak into this assertion (or, worse, into test output).
+  const priorToken = process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_TOKEN;
+  try {
+    let init;
+    const fetchImpl = async (url, opts) => {
+      init = opts;
+      return jsonResponse({ full_name: 'owner/repo' });
+    };
+    await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
+    assert.ok(init.headers['User-Agent']);
+    assert.equal(init.headers.Authorization, undefined);
+  } finally {
+    if (priorToken !== undefined) process.env.GITHUB_TOKEN = priorToken;
+  }
 });
 
 test('gives a helpful error when GitHub rate-limits (403)', async () => {
