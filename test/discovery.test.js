@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOUNDS, classifyPath, isPathSafe, discoverTree, fetchInterestingFiles } from '../src/discovery.js';
+import { BOUNDS, classifyPath, isPathSafe, discoverTree, fetchInterestingFiles, discoverComponents } from '../src/discovery.js';
 
 function jsonResponse(body, ok = true) {
   return { ok, status: ok ? 200 : 404, async json() { return body; } };
@@ -311,4 +311,144 @@ test('fetchInterestingFiles fetches marketplace.json first', async () => {
   await fetchInterestingFiles(fetchImpl, 'https://api.github.com/repos/o/r', {}, found);
 
   assert.ok(order[0].endsWith('marketplace.json'));
+});
+
+test('discoverComponents: single root plugin, no marketplace', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'hooks/hooks.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) return contentsResponse({ name: 'root-plugin' });
+    if (url.endsWith('/contents/hooks/hooks.json')) return contentsResponse({ hooks: { PreToolUse: [] } });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.components.length, 1);
+  assert.equal(result.components[0].path, '');
+  assert.equal(result.components[0].manifests.plugin.name, 'root-plugin');
+  assert.equal(result.marketplace, false);
+});
+
+test('discoverComponents: marketplace with one nested plugin (Shunt regression fixture)', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/shunt/hooks/hooks.json', type: 'blob', size: 20 },
+        { path: 'plugins/shunt/skills/route/SKILL.md', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'shunt', source: './plugins/shunt' }] });
+    }
+    if (url.endsWith('/contents/plugins/shunt/.claude-plugin/plugin.json')) return contentsResponse({ name: 'shunt' });
+    if (url.endsWith('/contents/plugins/shunt/hooks/hooks.json')) {
+      return contentsResponse({ hooks: { PreToolUse: [{ hooks: [{ command: 'node route.js' }] }] } });
+    }
+    if (url.endsWith('/contents/plugins/shunt/skills/route/SKILL.md')) return { ok: true, status: 200, async json() { return { content: Buffer.from('# Route skill').toString('base64') }; } };
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/spotify/portal-ai-plugins', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.marketplace, true);
+  assert.equal(result.components.length, 1);
+  const shunt = result.components[0];
+  assert.equal(shunt.path, 'plugins/shunt');
+  assert.equal(shunt.manifests.plugin.name, 'shunt');
+  assert.equal(shunt.manifests.hooks.hooks.PreToolUse.length, 1);
+  assert.deepEqual(shunt.skills, ['plugins/shunt/skills/route/SKILL.md']);
+});
+
+test('discoverComponents: multiple plugins in one marketplace stay separate', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/a/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/b/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'a', source: './plugins/a' }, { name: 'b', source: './plugins/b' }] });
+    }
+    if (url.endsWith('/contents/plugins/a/.claude-plugin/plugin.json')) return contentsResponse({ name: 'a' });
+    if (url.endsWith('/contents/plugins/b/.claude-plugin/plugin.json')) return contentsResponse({ name: 'b' });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.deepEqual(result.components.map((c) => c.path).sort(), ['plugins/a', 'plugins/b']);
+});
+
+test('discoverComponents: malformed marketplace.json degrades to no marketplace expansion', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [{ path: '.claude-plugin/marketplace.json', type: 'blob', size: 10 }] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return { ok: true, status: 200, async json() { return { content: Buffer.from('{not valid json').toString('base64') }; } };
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.marketplace, true);
+  assert.equal(result.components.length, 1);
+  assert.equal(result.components[0].path, '');
+});
+
+test('discoverComponents: path-traversal source is rejected, not followed', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [{ path: '.claude-plugin/marketplace.json', type: 'blob', size: 10 }] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'evil', source: '../../etc/passwd' }] });
+    }
+    throw new Error(`unexpected fetch of ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.ok(result.skipped.some((s) => s.reason === 'path-traversal'));
+  assert.deepEqual(result.components.map((c) => c.path), ['']);
+});
+
+test('discoverComponents: subpath-addressed candidate returns just that component', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/other/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/plugins/shunt/.claude-plugin/plugin.json')) return contentsResponse({ name: 'shunt' });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: 'plugins/shunt',
+  });
+
+  assert.equal(result.components.length, 1);
+  assert.equal(result.components[0].manifests.plugin.name, 'shunt');
 });

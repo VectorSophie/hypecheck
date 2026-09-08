@@ -172,3 +172,82 @@ export async function fetchInterestingFiles(fetchImpl, repoUrl, headers, found) 
 function safeJson(text) {
   try { return JSON.parse(text); } catch { return null; }
 }
+
+export async function discoverComponents(fetchImpl, repoUrl, headers, { defaultBranch, repoSizeKb, subpath }) {
+  const tree = await discoverTree(fetchImpl, repoUrl, headers, { defaultBranch, repoSizeKb, subpath });
+  const contents = await fetchInterestingFiles(fetchImpl, repoUrl, headers, tree.found);
+
+  const marketplaceEntry = tree.found.find((f) => f.kind === 'marketplace');
+  const marketplaceFile = marketplaceEntry ? contents.files[marketplaceEntry.path] : null;
+  const marketplace = marketplaceFile?.json ?? null;
+
+  const pluginRoots = new Set(
+    tree.found.filter((f) => f.kind === 'plugin').map((f) => posixDirname(posixDirname(f.path))),
+  );
+
+  if (marketplace && Array.isArray(marketplace.plugins)) {
+    for (const entry of marketplace.plugins) {
+      const source = typeof entry?.source === 'string' ? entry.source.replace(/^\.\//, '') : null;
+      if (!source) continue;
+      if (!isPathSafe(source)) {
+        tree.skipped.push({ path: source, reason: 'path-traversal' });
+        continue;
+      }
+      pluginRoots.add(source.replace(/\/+$/, ''));
+    }
+  }
+
+  if (pluginRoots.size === 0) pluginRoots.add('');
+
+  const roots = [...pluginRoots].sort();
+  const components = roots.map((root) => buildComponent(root, contents.files, roots));
+
+  return {
+    components,
+    marketplace: Boolean(marketplaceEntry),
+    scanned: [...tree.scanned, ...contents.scanned],
+    skipped: [...tree.skipped, ...contents.skipped],
+  };
+}
+
+function buildComponent(root, files, knownRoots) {
+  const manifests = { plugin: null, hooks: null, mcp: null };
+  const skills = [];
+  const commands = [];
+  const claudeMdHazards = [];
+
+  for (const [filePath, file] of Object.entries(files)) {
+    if (assignedRoot(filePath, knownRoots) !== root) continue;
+    if (file.kind === 'plugin') manifests.plugin = file.json;
+    if (file.kind === 'hooks') manifests.hooks = file.json;
+    if (file.kind === 'mcp') manifests.mcp = file.json;
+    if (file.kind === 'skill') skills.push(filePath);
+    if (file.kind === 'command') commands.push(posixBasename(filePath).replace(/\.md$/, ''));
+    if (file.kind === 'adversarial-claude-md') claudeMdHazards.push(filePath);
+  }
+
+  return { path: root, manifests, skills, commands, claudeMdHazards };
+}
+
+// Every file is owned by the most specific known plugin root that prefixes
+// its path; files matching no root belong to the root ('') component.
+function assignedRoot(filePath, knownRoots) {
+  let best = '';
+  for (const root of knownRoots) {
+    if (!root) continue;
+    if ((filePath === root || filePath.startsWith(`${root}/`)) && root.length > best.length) {
+      best = root;
+    }
+  }
+  return best;
+}
+
+function posixDirname(p) {
+  const idx = p.lastIndexOf('/');
+  return idx === -1 ? '' : p.slice(0, idx);
+}
+
+function posixBasename(p) {
+  const idx = p.lastIndexOf('/');
+  return idx === -1 ? p : p.slice(idx + 1);
+}
