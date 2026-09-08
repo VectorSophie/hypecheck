@@ -433,6 +433,64 @@ test('discoverComponents: path-traversal source is rejected, not followed', asyn
   assert.deepEqual(result.components.map((c) => c.path), ['']);
 });
 
+test('discoverComponents: marketplace source "." normalizes to the root component, not a phantom one', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: '.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'root-plugin', source: '.' }] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) return contentsResponse({ name: 'root-plugin' });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.components.length, 1, 'a "." source must not create a second, empty component');
+  assert.equal(result.components[0].path, '');
+  assert.equal(result.components[0].manifests.plugin.name, 'root-plugin');
+});
+
+test('discoverComponents: files are assigned to the most specific of two overlapping roots', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/shunt/hooks/hooks.json', type: 'blob', size: 20 },
+        { path: 'plugins/other-file.md', type: 'blob', size: 10 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'outer', source: './plugins' }, { name: 'shunt', source: './plugins/shunt' }] });
+    }
+    if (url.endsWith('/contents/plugins/.claude-plugin/plugin.json')) return contentsResponse({ name: 'outer' });
+    if (url.endsWith('/contents/plugins/shunt/.claude-plugin/plugin.json')) return contentsResponse({ name: 'shunt' });
+    if (url.endsWith('/contents/plugins/shunt/hooks/hooks.json')) return contentsResponse({ hooks: { PreToolUse: [] } });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.deepEqual(result.components.map((c) => c.path).sort(), ['plugins', 'plugins/shunt']);
+
+  const shunt = result.components.find((c) => c.path === 'plugins/shunt');
+  const outer = result.components.find((c) => c.path === 'plugins');
+
+  // The file inside plugins/shunt/ must go to the MORE SPECIFIC root, not the outer one.
+  assert.ok(shunt.manifests.hooks.hooks.PreToolUse, 'hooks.json under plugins/shunt/ must be assigned to the plugins/shunt component');
+  assert.equal(outer.manifests.hooks, null, 'the outer plugins component must NOT also claim the shunt subdirectory\'s hooks.json');
+});
+
 test('discoverComponents: subpath-addressed candidate returns just that component', async () => {
   const fetchImpl = async (url) => {
     if (url.endsWith('git/trees/main?recursive=1')) {

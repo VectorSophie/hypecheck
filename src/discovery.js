@@ -187,13 +187,13 @@ export async function discoverComponents(fetchImpl, repoUrl, headers, { defaultB
 
   if (marketplace && Array.isArray(marketplace.plugins)) {
     for (const entry of marketplace.plugins) {
-      const source = typeof entry?.source === 'string' ? entry.source.replace(/^\.\//, '') : null;
-      if (!source) continue;
-      if (!isPathSafe(source)) {
-        tree.skipped.push({ path: source, reason: 'path-traversal' });
+      if (typeof entry?.source !== 'string' || !entry.source) continue;
+      if (!isPathSafe(entry.source)) {
+        tree.skipped.push({ path: entry.source, reason: 'path-traversal' });
         continue;
       }
-      pluginRoots.add(source.replace(/\/+$/, ''));
+      const normalized = path.posix.normalize(entry.source);
+      pluginRoots.add(normalized === '.' ? '' : normalized);
     }
   }
 
