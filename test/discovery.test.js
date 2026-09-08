@@ -126,3 +126,76 @@ test('discoverTree degrades gracefully when the tree fetch fails', async () => {
   assert.deepEqual(result.found, []);
   assert.equal(result.requestsUsed, 1);
 });
+
+test('discoverTree walks breadth-first for a large repo, following subtree shas', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url === 'https://api.github.com/repos/o/r/git/trees/main') {
+      return jsonResponse({ tree: [
+        { path: 'plugins', type: 'tree', sha: 'sha-plugins' },
+        { path: 'README.md', type: 'blob', size: 50 },
+      ] });
+    }
+    if (url === 'https://api.github.com/repos/o/r/git/trees/sha-plugins') {
+      return jsonResponse({ tree: [
+        { path: 'shunt', type: 'tree', sha: 'sha-shunt' },
+      ] });
+    }
+    if (url === 'https://api.github.com/repos/o/r/git/trees/sha-shunt') {
+      return jsonResponse({ tree: [
+        { path: 'hooks.json', type: 'blob', size: 30 },
+      ] });
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 999_999, subpath: '',
+  });
+
+  assert.deepEqual(result.found.map((f) => f.path), ['plugins/shunt/hooks.json']);
+  assert.equal(calls.length, 3);
+});
+
+test('discoverTree roots a shallow walk at an explicit subpath via the contents API', async () => {
+  const fetchImpl = async (url) => {
+    if (url === 'https://api.github.com/repos/o/r/contents/plugins/shunt') {
+      return jsonResponse([
+        { name: 'hooks.json', type: 'file', size: 30, sha: 'blob-1' },
+        { name: 'scripts', type: 'dir', sha: 'sha-scripts' },
+      ]);
+    }
+    if (url === 'https://api.github.com/repos/o/r/git/trees/sha-scripts') {
+      return jsonResponse({ tree: [{ path: 'route.js', type: 'blob', size: 40 }] });
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 999_999, subpath: 'plugins/shunt',
+  });
+
+  assert.deepEqual(result.found.map((f) => f.path).sort(), ['plugins/shunt/hooks.json']);
+});
+
+test('discoverTree stops issuing requests once the request bound is hit', async () => {
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    calls += 1;
+    // Every directory has one interesting file and one subdirectory, so an
+    // unbounded walk would run forever.
+    const depth = (url.match(/\/d/g) ?? []).length;
+    return jsonResponse({ tree: [
+      { path: `hooks-${depth}.json`, type: 'blob', size: 10 },
+      { path: 'd', type: 'tree', sha: `${url}/d` },
+    ] });
+  };
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 999_999, subpath: '',
+  });
+
+  assert.equal(calls, BOUNDS.maxRequests);
+  assert.ok(result.skipped.some((s) => s.reason === 'requests'));
+});

@@ -93,7 +93,41 @@ function classifyAndCollect({ fullPath, relPath, depth, size }, budget, skipped,
   found.push({ path: fullPath, relPath, kind, size, depth });
 }
 
-// Placeholder — implemented in Task 4.
-async function walkShallow(_request, _repoUrl, _defaultBranch, _subpath, _budget, _skipped, _found) {
-  return;
+async function walkShallow(request, repoUrl, defaultBranch, subpath, budget, skipped, found) {
+  const rootUrl = subpath
+    ? `${repoUrl}/contents/${subpath}`
+    : `${repoUrl}/git/trees/${encodeURIComponent(defaultBranch)}`;
+
+  const queue = [{ url: rootUrl, prefix: subpath ?? '', depth: 0, viaContents: Boolean(subpath) }];
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+
+    if (budget.requests >= BOUNDS.maxRequests) {
+      skipped.push({ path: node.prefix, reason: 'requests' });
+      continue;
+    }
+
+    let children;
+    try {
+      const data = await request(node.url);
+      children = node.viaContents ? data : data.tree;
+    } catch {
+      continue;
+    }
+
+    for (const child of children ?? []) {
+      const name = node.viaContents ? child.name : child.path;
+      const isDir = node.viaContents ? child.type === 'dir' : child.type === 'tree';
+      const childPath = node.prefix ? `${node.prefix}/${name}` : name;
+
+      if (isDir) {
+        queue.push({ url: `${repoUrl}/git/trees/${child.sha}`, prefix: childPath, depth: node.depth + 1, viaContents: false });
+        continue;
+      }
+
+      const relPath = subpath && childPath.startsWith(`${subpath}/`) ? childPath.slice(subpath.length + 1) : childPath;
+      classifyAndCollect({ fullPath: childPath, relPath, depth: node.depth + 1, size: child.size ?? 0 }, budget, skipped, found);
+    }
+  }
 }
