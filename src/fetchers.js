@@ -1,3 +1,5 @@
+import { discoverComponents } from './discovery.js';
+
 export async function fetchCandidateData(candidate, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
 
@@ -42,28 +44,26 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
   // repos won't have one (or it's nested) — a miss is fine, not an error.
   const pkg = await fetchRepoJson(fetchImpl, repoUrl, 'package.json', headers);
 
-  // Real agent-tool config: hooks, MCP servers, plugin manifest. Drives the
-  // precise risk findings instead of regex over the README.
-  const manifests = {
-    plugin: await fetchRepoJson(fetchImpl, repoUrl, '.claude-plugin/plugin.json', headers),
-    hooks: await fetchRepoJson(fetchImpl, repoUrl, 'hooks/hooks.json', headers),
-    mcp: await fetchRepoJson(fetchImpl, repoUrl, '.mcp.json', headers),
-  };
+  const discovery = await discoverComponents(fetchImpl, repoUrl, headers, {
+    defaultBranch: repoResponse.default_branch ?? 'main',
+    repoSizeKb: repoResponse.size ?? 0,
+    subpath: candidate.subpath ?? '',
+  });
 
-  // Candidate's own slash commands / skills, for name-collision checks.
-  const candidateCommands = [
-    ...await fetchRepoDir(fetchImpl, repoUrl, 'commands', headers),
-    ...await fetchRepoDir(fetchImpl, repoUrl, '.claude/commands', headers),
-    ...await fetchRepoDir(fetchImpl, repoUrl, 'skills', headers),
-    ...await fetchRepoDir(fetchImpl, repoUrl, '.claude/skills', headers),
-  ];
+  const primary = discovery.components[0] ?? { manifests: { plugin: null, hooks: null, mcp: null }, commands: [] };
 
   return {
     source: 'github',
     candidate,
     package: pkg,
-    manifests,
-    candidateCommands,
+    manifests: primary.manifests,
+    candidateCommands: primary.commands,
+    components: discovery.components,
+    discovery: {
+      marketplace: discovery.marketplace,
+      scanned: discovery.scanned,
+      skipped: discovery.skipped,
+    },
     metadata: {
       fullName: repoResponse.full_name,
       description: repoResponse.description ?? '',
@@ -121,18 +121,6 @@ async function fetchRepoJson(fetchImpl, repoUrl, path, headers) {
     return JSON.parse(decodeBase64(response.content ?? ''));
   } catch {
     return null;
-  }
-}
-
-// Best-effort directory listing via the contents API. Returns command/skill
-// names (extension stripped); [] on any miss.
-async function fetchRepoDir(fetchImpl, repoUrl, path, headers) {
-  try {
-    const entries = await fetchJson(fetchImpl, `${repoUrl}/contents/${path}`, headers);
-    if (!Array.isArray(entries)) return [];
-    return entries.map((e) => String(e.name ?? '').replace(/\.[^.]+$/, '')).filter(Boolean);
-  } catch {
-    return [];
   }
 }
 

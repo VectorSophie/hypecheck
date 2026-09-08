@@ -16,6 +16,7 @@ test('fetches GitHub repository metadata and README', async () => {
         open_issues_count: 2,
         pushed_at: '2026-01-01T00:00:00Z',
         default_branch: 'main',
+        size: 10,
       });
     }
     if (url.endsWith('/repos/owner/repo/readme')) {
@@ -23,6 +24,9 @@ test('fetches GitHub repository metadata and README', async () => {
     }
     if (url.endsWith('/repos/owner/repo/contents/package.json')) {
       return jsonResponse({ content: Buffer.from(JSON.stringify({ scripts: { postinstall: 'x' } })).toString('base64') });
+    }
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [] });
     }
     throw new Error(`unexpected URL ${url}`);
   };
@@ -33,8 +37,8 @@ test('fetches GitHub repository metadata and README', async () => {
   assert.equal(data.metadata.fullName, 'owner/repo');
   assert.equal(data.readme, 'npm install\npostinstall');
   assert.deepEqual(data.package.scripts, { postinstall: 'x' });
-  // repo + readme + package.json + 3 manifests + 4 command/skill dir probes
-  assert.equal(calls.length, 10);
+  assert.deepEqual(data.manifests, { plugin: null, hooks: null, mcp: null });
+  assert.equal(data.components.length, 1);
 });
 
 test('GitHub fetch tolerates a missing package.json', async () => {
@@ -47,21 +51,36 @@ test('GitHub fetch tolerates a missing package.json', async () => {
   assert.deepEqual(data.manifests, { plugin: null, hooks: null, mcp: null });
 });
 
-test('GitHub fetch lists candidate command and skill names', async () => {
+test('GitHub fetch lists candidate command and skill names via discovery', async () => {
   const fetchImpl = async (url) => {
-    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r' });
-    if (url.endsWith('/contents/commands')) return jsonResponse([{ name: 'review.md', type: 'file' }, { name: 'deploy.md', type: 'file' }]);
-    if (url.endsWith('/contents/skills')) return jsonResponse([{ name: 'lint-it', type: 'dir' }]);
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: 'commands/review.md', type: 'blob', size: 10 },
+        { path: 'commands/deploy.md', type: 'blob', size: 10 },
+        { path: 'skills/lint-it/SKILL.md', type: 'blob', size: 10 },
+      ] });
+    }
+    if (url.endsWith('/contents/commands/review.md') || url.endsWith('/contents/commands/deploy.md') || url.endsWith('/contents/skills/lint-it/SKILL.md')) {
+      return jsonResponse({ content: Buffer.from('# doc').toString('base64') });
+    }
     return jsonResponse(null, false);
   };
   const data = await fetchCandidateData({ type: 'github', owner: 'o', repo: 'r' }, { fetchImpl });
-  assert.deepEqual(data.candidateCommands.sort(), ['deploy', 'lint-it', 'review']);
+  assert.deepEqual(data.candidateCommands.sort(), ['deploy', 'review']);
 });
 
 test('GitHub fetch attaches parsed manifests', async () => {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
   const fetchImpl = async (url) => {
-    if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo' });
+    if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/plugin.json', type: 'blob', size: 10 },
+        { path: 'hooks/hooks.json', type: 'blob', size: 10 },
+        { path: '.mcp.json', type: 'blob', size: 10 },
+      ] });
+    }
     if (url.endsWith('/contents/.claude-plugin/plugin.json')) return jsonResponse({ content: b64({ name: 'p' }) });
     if (url.endsWith('/contents/hooks/hooks.json')) return jsonResponse({ content: b64({ hooks: { PreToolUse: [] } }) });
     if (url.endsWith('/contents/.mcp.json')) return jsonResponse({ content: b64({ mcpServers: {} }) });
@@ -71,6 +90,24 @@ test('GitHub fetch attaches parsed manifests', async () => {
   assert.equal(data.manifests.plugin.name, 'p');
   assert.ok(data.manifests.hooks.hooks.PreToolUse);
   assert.deepEqual(data.manifests.mcp.mcpServers, {});
+});
+
+test('GitHub fetch honors an addressed subpath', async () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/spotify/portal-ai-plugins')) return jsonResponse({ full_name: 'spotify/portal-ai-plugins', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 10 },
+        { path: 'plugins/other/.claude-plugin/plugin.json', type: 'blob', size: 10 },
+      ] });
+    }
+    if (url.endsWith('/contents/plugins/shunt/.claude-plugin/plugin.json')) return jsonResponse({ content: b64({ name: 'shunt' }) });
+    return jsonResponse(null, false);
+  };
+  const data = await fetchCandidateData({ type: 'github', owner: 'spotify', repo: 'portal-ai-plugins', subpath: 'plugins/shunt' }, { fetchImpl });
+  assert.equal(data.components.length, 1);
+  assert.equal(data.manifests.plugin.name, 'shunt');
 });
 
 test('fetches npm metadata and extracts package signals', async () => {

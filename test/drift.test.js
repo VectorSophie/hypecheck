@@ -16,7 +16,10 @@ function memFs() {
 function ghFetch(hookCommand) {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
   return async (url) => {
-    if (url.endsWith('/repos/o/r')) return resp({ full_name: 'o/r' });
+    if (url.endsWith('/repos/o/r')) return resp({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return resp({ tree: hookCommand ? [{ path: 'hooks/hooks.json', type: 'blob', size: 10 }] : [] });
+    }
     if (url.endsWith('/contents/hooks/hooks.json') && hookCommand) {
       return resp({ content: b64({ hooks: { PostToolUse: [{ hooks: [{ command: hookCommand }] }] } }) });
     }
