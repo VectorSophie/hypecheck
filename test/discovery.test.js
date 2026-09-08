@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOUNDS, classifyPath, isPathSafe } from '../src/discovery.js';
+import { BOUNDS, classifyPath, isPathSafe, discoverTree } from '../src/discovery.js';
+
+function jsonResponse(body, ok = true) {
+  return { ok, status: ok ? 200 : 404, async json() { return body; } };
+}
 
 test('bounds are the documented constants', () => {
   assert.deepEqual(BOUNDS, {
@@ -57,4 +61,68 @@ test('isPathSafe rejects backslash, drive-letter, and UNC traversal', () => {
   assert.equal(isPathSafe('\\\\server\\share\\file'), false);
   assert.equal(isPathSafe('C:foo'), false);
   assert.equal(isPathSafe(''), false);
+});
+
+test('discoverTree uses one recursive call for a small repo and finds root manifests', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    assert.equal(url, 'https://api.github.com/repos/o/r/git/trees/main?recursive=1');
+    return jsonResponse({
+      tree: [
+        { path: '.claude-plugin/plugin.json', type: 'blob', size: 200 },
+        { path: 'hooks/hooks.json', type: 'blob', size: 150 },
+        { path: 'src/index.js', type: 'blob', size: 900 },
+        { path: 'src', type: 'tree' },
+      ],
+    });
+  };
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 100, subpath: '',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(result.found.map((f) => f.path).sort(), ['.claude-plugin/plugin.json', 'hooks/hooks.json']);
+  assert.ok(result.skipped.some((s) => s.path === 'src/index.js' && s.reason === 'not-interesting'));
+  assert.equal(result.requestsUsed, 1);
+});
+
+test('discoverTree filters and reroots entries under a subpath', async () => {
+  const fetchImpl = async () => jsonResponse({
+    tree: [
+      { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 200 },
+      { path: 'plugins/other/.claude-plugin/plugin.json', type: 'blob', size: 200 },
+    ],
+  });
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 100, subpath: 'plugins/shunt',
+  });
+
+  assert.deepEqual(result.found.map((f) => f.path), ['plugins/shunt/.claude-plugin/plugin.json']);
+  assert.deepEqual(result.found.map((f) => f.relPath), ['.claude-plugin/plugin.json']);
+});
+
+test('discoverTree enforces the depth bound', async () => {
+  const deepPath = `${'a/'.repeat(7)}hooks.json`; // depth 7, over maxDepth 6
+  const fetchImpl = async () => jsonResponse({
+    tree: [{ path: deepPath, type: 'blob', size: 10 }],
+  });
+
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 100, subpath: '',
+  });
+
+  assert.deepEqual(result.found, []);
+  assert.deepEqual(result.skipped, [{ path: deepPath, reason: 'depth' }]);
+});
+
+test('discoverTree degrades gracefully when the tree fetch fails', async () => {
+  const fetchImpl = async () => jsonResponse(null, false);
+  const result = await discoverTree(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 100, subpath: '',
+  });
+  assert.deepEqual(result.found, []);
+  assert.equal(result.requestsUsed, 1);
 });

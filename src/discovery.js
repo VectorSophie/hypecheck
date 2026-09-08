@@ -41,3 +41,59 @@ export function isPathSafe(relativePath) {
   const normalized = path.posix.normalize(relativePath);
   return normalized !== '..' && !normalized.startsWith('../');
 }
+
+export async function discoverTree(fetchImpl, repoUrl, headers, { defaultBranch, repoSizeKb = 0, subpath = '' }) {
+  const budget = { requests: 0, entries: 0 };
+  const skipped = [];
+  const found = [];
+
+  async function request(url) {
+    budget.requests += 1;
+    const response = await fetchImpl(url, headers ? { headers } : undefined);
+    if (!response.ok) throw new Error(`discovery fetch failed for ${url}: ${response.status}`);
+    return response.json();
+  }
+
+  if (repoSizeKb > 0 && repoSizeKb <= RECURSIVE_SIZE_THRESHOLD_KB) {
+    let data;
+    try {
+      data = await request(`${repoUrl}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`);
+    } catch {
+      return { found, skipped, scanned: [], requestsUsed: budget.requests };
+    }
+
+    for (const entry of data.tree ?? []) {
+      if (entry.type !== 'blob') continue;
+
+      let relPath = entry.path;
+      if (subpath) {
+        const prefix = `${subpath}/`;
+        if (!relPath.startsWith(prefix)) continue;
+        relPath = relPath.slice(prefix.length);
+      }
+
+      const fullPath = subpath ? `${subpath}/${relPath}` : relPath;
+      const depth = relPath.split('/').length - 1;
+      classifyAndCollect({ fullPath, relPath, depth, size: entry.size ?? 0 }, budget, skipped, found);
+    }
+
+    return { found, skipped, scanned: found.map((f) => f.path), requestsUsed: budget.requests };
+  }
+
+  await walkShallow(request, repoUrl, defaultBranch, subpath, budget, skipped, found);
+  return { found, skipped, scanned: found.map((f) => f.path), requestsUsed: budget.requests };
+}
+
+function classifyAndCollect({ fullPath, relPath, depth, size }, budget, skipped, found) {
+  budget.entries += 1;
+  if (depth > BOUNDS.maxDepth) { skipped.push({ path: fullPath, reason: 'depth' }); return; }
+  if (budget.entries > BOUNDS.maxEntries) { skipped.push({ path: fullPath, reason: 'count' }); return; }
+  const kind = classifyPath(relPath);
+  if (!kind) { skipped.push({ path: fullPath, reason: 'not-interesting' }); return; }
+  found.push({ path: fullPath, relPath, kind, size, depth });
+}
+
+// Placeholder — implemented in Task 4.
+async function walkShallow(_request, _repoUrl, _defaultBranch, _subpath, _budget, _skipped, _found) {
+  return;
+}
