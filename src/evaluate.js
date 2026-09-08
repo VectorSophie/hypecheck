@@ -18,9 +18,38 @@ export async function evaluateCandidate(input, options = {}) {
   }
 
   const data = await fetchCandidateData(candidate, options);
+
+  if (data.components && data.components.length > 1) {
+    return evaluateMultiComponent(data, options);
+  }
+
   const analysis = analyzeCandidate(data, options);
   if (options.track) applyDrift(candidate, data, analysis, options);
   return scoreAnalysis(analysis);
+}
+
+// Marketplace/monorepo with 2+ materially distinct components: no single
+// verdict describes the whole repo, so evaluate and score each separately.
+function evaluateMultiComponent(data, options) {
+  const components = data.components.map((component) => {
+    const componentData = {
+      ...data,
+      manifests: component.manifests,
+      candidateCommands: component.commands,
+      components: undefined,
+    };
+    const analysis = analyzeCandidate(componentData, options);
+    const scored = scoreAnalysis(analysis);
+    return { path: component.path || '(root)', ...scored };
+  });
+
+  return {
+    multiComponent: true,
+    targetName: data.metadata?.fullName ?? data.candidate?.canonical ?? 'candidate',
+    componentCount: components.length,
+    components,
+    discovery: data.discovery,
+  };
 }
 
 // Opt-in: compare the candidate's current surface against the last --track eval,
