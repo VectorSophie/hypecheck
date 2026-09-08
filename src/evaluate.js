@@ -30,6 +30,21 @@ export async function evaluateCandidate(input, options = {}) {
 
 // Marketplace/monorepo with 2+ materially distinct components: no single
 // verdict describes the whole repo, so evaluate and score each separately.
+//
+// KNOWN LIMITATION: each component's analysis still reads the repo-level
+// `readme`/`package`/`metadata` (only `manifests`/`candidateCommands` are
+// swapped per-component), so README-text-based and package.json-based
+// findings are currently identical across every component in a marketplace,
+// even though each component's own manifests are correctly separated. A
+// full fix needs discovery.js to capture per-component README/package.json,
+// which it doesn't today (only manifest/hook/mcp/skill/command files are
+// classified as "interesting"). Tracked as a fast-follow, not fixed here.
+//
+// KNOWN LIMITATION: `options.track` (the `--track` CLI flag) is silently
+// ignored here — `applyDrift` is only ever called from the single-component
+// path in `evaluateCandidate`. Running `--track` against a multi-component
+// candidate produces a rollup with no drift detection and no cache write,
+// with no error or warning to the user.
 function evaluateMultiComponent(data, options) {
   const components = data.components.map((component) => {
     const componentData = {
