@@ -52,3 +52,41 @@ test('recognizes social links as link sources', () => {
 test('rejects empty candidates', () => {
   assert.throws(() => normalizeCandidate('  '), /Candidate is required/);
 });
+
+test('parses a subpath from fragment syntax', () => {
+  assert.deepEqual(normalizeCandidate('spotify/portal-ai-plugins#plugins/shunt'), {
+    type: 'github',
+    original: 'spotify/portal-ai-plugins#plugins/shunt',
+    owner: 'spotify',
+    repo: 'portal-ai-plugins',
+    canonical: 'https://github.com/spotify/portal-ai-plugins',
+    subpath: 'plugins/shunt',
+  });
+});
+
+test('parses a subpath from a GitHub tree URL', () => {
+  assert.deepEqual(normalizeCandidate('https://github.com/spotify/portal-ai-plugins/tree/main/plugins/shunt'), {
+    type: 'github',
+    original: 'https://github.com/spotify/portal-ai-plugins/tree/main/plugins/shunt',
+    owner: 'spotify',
+    repo: 'portal-ai-plugins',
+    canonical: 'https://github.com/spotify/portal-ai-plugins',
+    subpath: 'plugins/shunt',
+  });
+});
+
+test('parses a subpath from a GitHub URL fragment', () => {
+  assert.deepEqual(normalizeCandidate('https://github.com/spotify/portal-ai-plugins#plugins/shunt'), {
+    type: 'github',
+    original: 'https://github.com/spotify/portal-ai-plugins#plugins/shunt',
+    owner: 'spotify',
+    repo: 'portal-ai-plugins',
+    canonical: 'https://github.com/spotify/portal-ai-plugins',
+    subpath: 'plugins/shunt',
+  });
+});
+
+test('plain owner/repo has no subpath field', () => {
+  const result = normalizeCandidate('VectorSophie/hypecheck');
+  assert.equal('subpath' in result, false);
+});

@@ -15,10 +15,10 @@ export function normalizeCandidate(input) {
     return normalizeUrlCandidate(original, url);
   }
 
-  const bareGithub = original.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/);
+  const bareGithub = original.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:#(.+))?$/);
   if (bareGithub && !original.startsWith('@')) {
-    const [, owner, repo] = bareGithub;
-    return githubCandidate(original, owner, repo);
+    const [, owner, repo, subpath] = bareGithub;
+    return githubCandidate(original, owner, repo, subpath);
   }
 
   if (isLikelyNpmName(original)) {
@@ -33,7 +33,19 @@ function normalizeUrlCandidate(original, url) {
   const pathParts = url.pathname.split('/').filter(Boolean);
 
   if (GITHUB_HOSTS.has(host) && pathParts.length >= 2) {
-    return githubCandidate(original, pathParts[0], stripGitSuffix(pathParts[1]));
+    const owner = pathParts[0];
+    const repo = stripGitSuffix(pathParts[1]);
+    let subpath = null;
+
+    if (pathParts[2] === 'tree' && pathParts.length > 4) {
+      // /owner/repo/tree/<ref>/<subpath...> — ref is read but ignored; we
+      // always evaluate the default branch.
+      subpath = pathParts.slice(4).join('/');
+    } else if (url.hash && url.hash.length > 1) {
+      subpath = decodeURIComponent(url.hash.slice(1));
+    }
+
+    return githubCandidate(original, owner, repo, subpath);
   }
 
   if (NPM_HOSTS.has(host) && pathParts[0] === 'package' && pathParts[1]) {
@@ -53,14 +65,19 @@ function normalizeUrlCandidate(original, url) {
   throw new Error(`Unsupported candidate URL: ${original}`);
 }
 
-function githubCandidate(original, owner, repo) {
-  return {
+function githubCandidate(original, owner, repo, subpath) {
+  const candidate = {
     type: 'github',
     original,
     owner,
     repo,
     canonical: `https://github.com/${owner}/${repo}`,
   };
+
+  const cleanSubpath = subpath ? subpath.replace(/^\/+|\/+$/g, '') : '';
+  if (cleanSubpath) candidate.subpath = cleanSubpath;
+
+  return candidate;
 }
 
 function npmCandidate(original, packageName) {
