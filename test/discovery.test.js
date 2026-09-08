@@ -510,3 +510,53 @@ test('discoverComponents: subpath-addressed candidate returns just that componen
   assert.equal(result.components.length, 1);
   assert.equal(result.components[0].manifests.plugin.name, 'shunt');
 });
+
+test('discoverComponents: marketplace source with a trailing slash does not create a phantom component', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: '.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'root-plugin', source: './' }] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) return contentsResponse({ name: 'root-plugin' });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.components.length, 1, 'a "./" source must not create a second, phantom component');
+  assert.equal(result.components[0].path, '');
+  assert.equal(result.components[0].manifests.plugin.name, 'root-plugin');
+});
+
+test('discoverComponents: marketplace source with a nested trailing slash normalizes to match the real root', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/shunt/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/shunt/hooks/hooks.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'shunt', source: 'plugins/shunt/' }] });
+    }
+    if (url.endsWith('/contents/plugins/shunt/.claude-plugin/plugin.json')) return contentsResponse({ name: 'shunt' });
+    if (url.endsWith('/contents/plugins/shunt/hooks/hooks.json')) return contentsResponse({ hooks: { PreToolUse: [] } });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.components.length, 1, 'trailing-slash source must merge with the real plugins/shunt root, not create a duplicate');
+  assert.equal(result.components[0].path, 'plugins/shunt');
+  assert.ok(result.components[0].manifests.hooks.hooks.PreToolUse);
+});

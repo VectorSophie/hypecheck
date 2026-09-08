@@ -192,8 +192,8 @@ export async function discoverComponents(fetchImpl, repoUrl, headers, { defaultB
         tree.skipped.push({ path: entry.source, reason: 'path-traversal' });
         continue;
       }
-      const normalized = path.posix.normalize(entry.source);
-      pluginRoots.add(normalized === '.' ? '' : normalized);
+      const normalized = path.posix.normalize(entry.source).replace(/\/+$/, '');
+      pluginRoots.add(normalized === '.' || normalized === '' ? '' : normalized);
     }
   }
 
