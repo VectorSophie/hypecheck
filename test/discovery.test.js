@@ -560,3 +560,31 @@ test('discoverComponents: marketplace source with a nested trailing slash normal
   assert.equal(result.components[0].path, 'plugins/shunt');
   assert.ok(result.components[0].manifests.hooks.hooks.PreToolUse);
 });
+
+test('discoverComponents on an enormous repo stays within every bound', async () => {
+  // 600 root-level files (over maxEntries 500), one of them a real plugin
+  // manifest near the front so we can prove real signal still surfaces.
+  const bigTree = [
+    { path: '.claude-plugin/plugin.json', type: 'blob', size: 20 },
+    ...Array.from({ length: 600 }, (_, i) => ({ path: `noise/file-${i}.txt`, type: 'blob', size: 500 })),
+  ];
+
+  let contentFetches = 0;
+  const fetchImpl = async (url) => {
+    if (url.endsWith('git/trees/main?recursive=1')) return jsonResponse({ tree: bigTree });
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) {
+      contentFetches += 1;
+      return contentsResponse({ name: 'big-repo-plugin' });
+    }
+    throw new Error(`unexpected fetch of ${url} — a bound was not respected`);
+  };
+
+  const result = await discoverComponents(fetchImpl, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 10, subpath: '',
+  });
+
+  assert.equal(result.components[0].manifests.plugin.name, 'big-repo-plugin');
+  assert.equal(contentFetches, 1);
+  assert.ok(result.skipped.filter((s) => s.reason === 'not-interesting').length <= BOUNDS.maxEntries);
+  assert.ok(result.skipped.some((s) => s.reason === 'count'), 'entries beyond maxEntries must be recorded as skipped');
+});
