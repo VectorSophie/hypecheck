@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOUNDS, classifyPath, isPathSafe, discoverTree } from '../src/discovery.js';
+import { BOUNDS, classifyPath, isPathSafe, discoverTree, fetchInterestingFiles } from '../src/discovery.js';
 
 function jsonResponse(body, ok = true) {
   return { ok, status: ok ? 200 : 404, async json() { return body; } };
+}
+
+function contentsResponse(obj) {
+  return jsonResponse({ content: Buffer.from(JSON.stringify(obj)).toString('base64') });
 }
 
 test('bounds are the documented constants', () => {
@@ -250,4 +254,61 @@ test('discoverTree assigns the same depth to a file regardless of recursive- vs 
   assert.equal(shallowResult.found.length, 1, 'shallow mode should find the same depth-6 file — this is the regression this test guards');
   assert.equal(recursiveResult.found[0].depth, shallowResult.found[0].depth);
   assert.equal(recursiveResult.found[0].depth, 6);
+});
+
+test('fetchInterestingFiles fetches and parses classified files', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/contents/.claude-plugin/plugin.json')) return contentsResponse({ name: 'shunt' });
+    if (url.endsWith('/contents/hooks/hooks.json')) return contentsResponse({ hooks: { PreToolUse: [] } });
+    throw new Error(`unexpected ${url}`);
+  };
+
+  const found = [
+    { path: '.claude-plugin/plugin.json', relPath: '.claude-plugin/plugin.json', kind: 'plugin', size: 20 },
+    { path: 'hooks/hooks.json', relPath: 'hooks/hooks.json', kind: 'hooks', size: 20 },
+  ];
+
+  const result = await fetchInterestingFiles(fetchImpl, 'https://api.github.com/repos/o/r', {}, found);
+
+  assert.equal(result.files['.claude-plugin/plugin.json'].json.name, 'shunt');
+  assert.ok(result.files['hooks/hooks.json'].json.hooks.PreToolUse);
+  assert.deepEqual(result.scanned.sort(), ['.claude-plugin/plugin.json', 'hooks/hooks.json']);
+});
+
+test('fetchInterestingFiles stops after the file-count bound', async () => {
+  const fetchImpl = async () => contentsResponse({});
+  const found = Array.from({ length: 45 }, (_, i) => ({
+    path: `commands/c${i}.md`, relPath: `commands/c${i}.md`, kind: 'command', size: 5,
+  }));
+
+  const result = await fetchInterestingFiles(fetchImpl, 'https://api.github.com/repos/o/r', {}, found);
+
+  assert.equal(result.filesUsed, 40);
+  assert.equal(result.skipped.filter((s) => s.reason === 'count').length, 5);
+});
+
+test('fetchInterestingFiles stops after the byte bound', async () => {
+  const fetchImpl = async () => contentsResponse({});
+  const found = [
+    { path: 'a.json', relPath: 'a.json', kind: 'mcp', size: 250_000 },
+    { path: 'b.json', relPath: 'b.json', kind: 'mcp', size: 100_000 },
+  ];
+
+  const result = await fetchInterestingFiles(fetchImpl, 'https://api.github.com/repos/o/r', {}, found);
+
+  assert.deepEqual(result.scanned, ['a.json']);
+  assert.ok(result.skipped.some((s) => s.path === 'b.json' && s.reason === 'bytes'));
+});
+
+test('fetchInterestingFiles fetches marketplace.json first', async () => {
+  const order = [];
+  const fetchImpl = async (url) => { order.push(url); return contentsResponse({}); };
+  const found = [
+    { path: 'commands/a.md', relPath: 'commands/a.md', kind: 'command', size: 5 },
+    { path: '.claude-plugin/marketplace.json', relPath: '.claude-plugin/marketplace.json', kind: 'marketplace', size: 5 },
+  ];
+
+  await fetchInterestingFiles(fetchImpl, 'https://api.github.com/repos/o/r', {}, found);
+
+  assert.ok(order[0].endsWith('marketplace.json'));
 });

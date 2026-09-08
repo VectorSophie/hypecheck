@@ -135,3 +135,40 @@ async function walkShallow(request, repoUrl, defaultBranch, subpath, budget, ski
     }
   }
 }
+
+export async function fetchInterestingFiles(fetchImpl, repoUrl, headers, found) {
+  const scanned = [];
+  const skipped = [];
+  const files = {};
+  let bytesUsed = 0;
+  let filesUsed = 0;
+
+  // marketplace.json first so callers can expand `source` roots before
+  // grouping the rest of the fetched files into components.
+  const ordered = [...found].sort((a, b) => (a.kind === 'marketplace' ? -1 : b.kind === 'marketplace' ? 1 : 0));
+
+  for (const entry of ordered) {
+    if (filesUsed >= BOUNDS.maxFiles) { skipped.push({ path: entry.path, reason: 'count' }); continue; }
+    if (bytesUsed + entry.size > BOUNDS.maxBytes) { skipped.push({ path: entry.path, reason: 'bytes' }); continue; }
+
+    try {
+      const response = await fetchImpl(`${repoUrl}/contents/${entry.path}`, headers ? { headers } : undefined);
+      if (!response.ok) { skipped.push({ path: entry.path, reason: 'fetch-failed' }); continue; }
+      const body = await response.json();
+      const text = Buffer.from(body.content ?? '', 'base64').toString('utf8');
+
+      filesUsed += 1;
+      bytesUsed += entry.size;
+      scanned.push(entry.path);
+      files[entry.path] = { kind: entry.kind, text, json: safeJson(text) };
+    } catch {
+      skipped.push({ path: entry.path, reason: 'fetch-failed' });
+    }
+  }
+
+  return { files, scanned, skipped, bytesUsed, filesUsed };
+}
+
+function safeJson(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
