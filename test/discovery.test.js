@@ -224,3 +224,30 @@ test('discoverTree halts shallow-mode traversal at the depth bound, without burn
   assert.ok(calls < BOUNDS.maxRequests, 'depth bound must stop the walk well before the request bound is reached');
   assert.ok(result.skipped.some((s) => s.reason === 'depth'));
 });
+
+test('discoverTree assigns the same depth to a file regardless of recursive- vs shallow-mode discovery', async () => {
+  const deepRelPath = `${'d/'.repeat(6)}hooks.json`; // 6 nested directories, depth 6 — the documented boundary
+
+  // Recursive mode: repoSizeKb under the threshold, one tree call.
+  const recursiveFetch = async () => jsonResponse({ tree: [{ path: deepRelPath, type: 'blob', size: 10 }] });
+  const recursiveResult = await discoverTree(recursiveFetch, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 100, subpath: '',
+  });
+
+  // Shallow mode: repoSizeKb over the threshold, walked one directory level at a time.
+  const shallowFetch = async (url) => {
+    const depth = (url.match(/\/d/g) ?? []).length;
+    if (depth < 6) {
+      return jsonResponse({ tree: [{ path: 'd', type: 'tree', sha: `${url}/d` }] });
+    }
+    return jsonResponse({ tree: [{ path: 'hooks.json', type: 'blob', size: 10 }] });
+  };
+  const shallowResult = await discoverTree(shallowFetch, 'https://api.github.com/repos/o/r', {}, {
+    defaultBranch: 'main', repoSizeKb: 999_999, subpath: '',
+  });
+
+  assert.equal(recursiveResult.found.length, 1, 'recursive mode should find the depth-6 file');
+  assert.equal(shallowResult.found.length, 1, 'shallow mode should find the same depth-6 file — this is the regression this test guards');
+  assert.equal(recursiveResult.found[0].depth, shallowResult.found[0].depth);
+  assert.equal(recursiveResult.found[0].depth, 6);
+});

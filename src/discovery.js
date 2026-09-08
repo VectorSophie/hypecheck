@@ -131,7 +131,7 @@ async function walkShallow(request, repoUrl, defaultBranch, subpath, budget, ski
       }
 
       const relPath = subpath && childPath.startsWith(`${subpath}/`) ? childPath.slice(subpath.length + 1) : childPath;
-      classifyAndCollect({ fullPath: childPath, relPath, depth: node.depth + 1, size: child.size ?? 0 }, budget, skipped, found);
+      classifyAndCollect({ fullPath: childPath, relPath, depth: node.depth, size: child.size ?? 0 }, budget, skipped, found);
     }
   }
 }
