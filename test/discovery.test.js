@@ -49,3 +49,12 @@ test('isPathSafe rejects path-traversal attempts', () => {
   assert.equal(isPathSafe('/etc/passwd'), false);
   assert.equal(isPathSafe('plugins/../../etc'), false);
 });
+
+test('isPathSafe rejects backslash, drive-letter, and UNC traversal', () => {
+  assert.equal(isPathSafe('..\\..\\etc\\passwd'), false);
+  assert.equal(isPathSafe('foo\\..\\..\\bar'), false);
+  assert.equal(isPathSafe('C:\\Windows\\System32'), false);
+  assert.equal(isPathSafe('\\\\server\\share\\file'), false);
+  assert.equal(isPathSafe('C:foo'), false);
+  assert.equal(isPathSafe(''), false);
+});

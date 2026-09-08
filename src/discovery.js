@@ -34,6 +34,9 @@ export function classifyPath(relativePath) {
 // Guards marketplace.json `source` entries: never follow a path that
 // escapes the repo root.
 export function isPathSafe(relativePath) {
+  if (typeof relativePath !== 'string' || relativePath === '') return false;
+  if (relativePath.includes('\\')) return false; // never valid in a repo-relative path; also blocks Windows drive/UNC traversal
+  if (/^[A-Za-z]:/.test(relativePath)) return false; // drive-relative, e.g. "C:foo"
   if (path.posix.isAbsolute(relativePath)) return false;
   const normalized = path.posix.normalize(relativePath);
   return normalized !== '..' && !normalized.startsWith('../');
