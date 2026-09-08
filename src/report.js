@@ -45,6 +45,25 @@ export function renderMarkdownReport(report) {
   return `${lines.join('\n')}\n`;
 }
 
+export function renderMultiComponentReport(result) {
+  const lines = [
+    `# Hypecheck: ${result.targetName}`,
+    '',
+    `This repository bundles ${result.componentCount} components. Verdicts differ per component — no single verdict describes the whole repository.`,
+    '',
+  ];
+
+  for (const component of result.components) {
+    lines.push(`## ${component.path}`, '', `Verdict: ${component.verdict}`, '', component.summary, '');
+  }
+
+  if (result.discovery?.skipped?.length) {
+    lines.push('## Discovery bounds', '', `${result.discovery.skipped.length} path(s) skipped due to scan bounds (see --json for detail).`, '');
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
 // Advisory stack-fit note (weak signal): only shown when the profile produced one.
 function stackFitLines(fit) {
   if (!fit || fit.signal === 'none') return [];

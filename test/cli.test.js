@@ -147,10 +147,37 @@ test('CLI derives a stack profile from local config and notes mismatch', async (
   assert.ok(parsed.fit.tags.includes('ts'));
 });
 
-function jsonResponse(body) {
+test('eval renders a rollup with per-component verdicts for a marketplace repo', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/a/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/b/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'a', source: './plugins/a' }, { name: 'b', source: './plugins/b' }] });
+    }
+    if (url.endsWith('/contents/plugins/a/.claude-plugin/plugin.json')) return contentsResponse({ name: 'a' });
+    if (url.endsWith('/contents/plugins/b/.claude-plugin/plugin.json')) return contentsResponse({ name: 'b' });
+    return jsonResponse(null, false);
+  };
+
+  let out = '';
+  const code = await runCli(['eval', 'o/r', '--no-scan'], { fetchImpl, stdout: (t) => { out += t; }, stderr: () => {} });
+
+  assert.match(out, /2 components/);
+  assert.match(out, /plugins\/a/);
+  assert.match(out, /plugins\/b/);
+  assert.equal(typeof code, 'number');
+});
+
+function jsonResponse(body, ok = true) {
   return {
-    ok: true,
-    status: 200,
+    ok,
+    status: ok ? 200 : 404,
     async json() {
       return body;
     },
@@ -158,4 +185,9 @@ function jsonResponse(body) {
       return JSON.stringify(body);
     },
   };
+}
+
+// GitHub "contents" endpoint responses are base64-encoded.
+function contentsResponse(body) {
+  return jsonResponse({ content: Buffer.from(JSON.stringify(body)).toString('base64') });
 }

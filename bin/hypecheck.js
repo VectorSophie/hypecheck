@@ -11,7 +11,7 @@ import { evaluateCandidate } from '../src/evaluate.js';
 import { scanLocalContext } from '../src/local-context.js';
 import { profileUser } from '../src/profile.js';
 import { auditSetup } from '../src/audit.js';
-import { renderMarkdownReport, renderComparison, renderAudit } from '../src/report.js';
+import { renderMarkdownReport, renderMultiComponentReport, renderComparison, renderAudit } from '../src/report.js';
 import { explainFinding, FINDING_DOCS } from '../src/finding-docs.js';
 
 const NEGATIVE = new Set(['SKIP', 'REDUNDANT', 'DANGEROUS']);
@@ -59,6 +59,12 @@ async function cmdEval(args, options, stdout, stderr) {
   }
   try {
     const report = await evaluateCandidate(candidate, { ...options, localTools, userProfile, track });
+
+    if (report.multiComponent) {
+      stdout(json ? `${JSON.stringify(report, null, 2)}\n` : renderMultiComponentReport(report));
+      return report.components.some((c) => NEGATIVE.has(c.verdict)) ? 1 : 0;
+    }
+
     stdout(json ? `${JSON.stringify(report, null, 2)}\n` : renderMarkdownReport(report));
     return NEGATIVE.has(report.verdict) ? 1 : 0;
   } catch (error) {
