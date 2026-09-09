@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractClaimedSavings, detectMechanismKeywords, detectBenchmarkEvidence } from '../src/token-economics.js';
+import { extractClaimedSavings, detectMechanismKeywords, detectBenchmarkEvidence, computeTokenEconomics } from '../src/token-economics.js';
 
 test('extracts a "saves N%" style claim', () => {
   const result = extractClaimedSavings('This tool saves 98% of your context by routing bulk reads elsewhere.');
@@ -102,4 +102,57 @@ test('does not false-positive on unrelated paths', () => {
 test('handles missing/empty inputs safely', () => {
   assert.deepEqual(detectBenchmarkEvidence(), { present: false, paths: [] });
   assert.deepEqual(detectBenchmarkEvidence([], []), { present: false, paths: [] });
+});
+
+test('computeTokenEconomics: benchmark present is the top tier, even with other evidence', () => {
+  const data = { readme: 'Saves 90% of tokens by routing to a cheaper model.', hookScripts: {} };
+  const discovery = { scanned: ['bench/results.json'], skipped: [] };
+  const result = computeTokenEconomics(data, discovery);
+  assert.equal(result.evidenceTier, 'benchmarked');
+  assert.equal(result.claim.percentage, 90);
+  assert.equal(result.benchmark.present, true);
+  assert.ok(result.labels.includes('TOKEN_WIN'));
+});
+
+test('computeTokenEconomics: mechanism found in real hook source (not just README) is observed-from-repo', () => {
+  const data = { readme: 'A helpful hook.', hookScripts: { 'hooks/route.js': 'delegate to a cheaper model for bulk reads' } };
+  const discovery = { scanned: [], skipped: [] };
+  const result = computeTokenEconomics(data, discovery);
+  assert.equal(result.evidenceTier, 'observed-from-repo');
+  assert.ok(result.mechanisms.fromSource.includes('cheap-model-delegation'));
+  assert.ok(result.labels.includes('TOKEN_WIN'));
+});
+
+test('computeTokenEconomics: mechanism mentioned only in README (no source evidence) is inferred', () => {
+  const data = { readme: 'This tool uses a semantic search index to filter results.', hookScripts: {} };
+  const discovery = { scanned: [], skipped: [] };
+  const result = computeTokenEconomics(data, discovery);
+  assert.equal(result.evidenceTier, 'inferred');
+  assert.ok(result.mechanisms.fromReadme.includes('retrieval'));
+  assert.equal(result.mechanisms.fromSource.length, 0);
+  assert.ok(result.labels.includes('TOKEN_UNPROVEN'));
+});
+
+test('computeTokenEconomics: a bare percentage claim with no mechanism or benchmark evidence is claimed-only', () => {
+  const data = { readme: 'Saves 98% of your context window.', hookScripts: {} };
+  const discovery = { scanned: [], skipped: [] };
+  const result = computeTokenEconomics(data, discovery);
+  assert.equal(result.evidenceTier, 'claimed');
+  assert.equal(result.claim.percentage, 98);
+  assert.ok(result.labels.includes('TOKEN_UNPROVEN'));
+});
+
+test('computeTokenEconomics: nothing found at all is unknown, with no labels', () => {
+  const data = { readme: 'A simple utility.', hookScripts: {} };
+  const discovery = { scanned: [], skipped: [] };
+  const result = computeTokenEconomics(data, discovery);
+  assert.equal(result.evidenceTier, 'unknown');
+  assert.equal(result.claim, null);
+  assert.deepEqual(result.labels, []);
+});
+
+test('computeTokenEconomics: falls back to html for social-derived data, and tolerates missing discovery', () => {
+  const data = { html: 'Saves 50% of tokens.', hookScripts: undefined };
+  const result = computeTokenEconomics(data, undefined);
+  assert.equal(result.evidenceTier, 'claimed');
 });
