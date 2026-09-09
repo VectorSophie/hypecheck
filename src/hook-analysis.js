@@ -42,3 +42,36 @@ function detectFailOpen(source) {
   if (hasNonZeroExit) return 'closed';
   return 'unknown';
 }
+
+const INTERPRETERS = new Set(['node', 'nodejs', 'python', 'python3', 'bash', 'sh', 'zsh', 'ruby', 'perl', 'pwsh', 'powershell']);
+const SCRIPT_EXTENSION = /\.(?:js|mjs|cjs|py|sh|rb|pl|ps1)$/i;
+
+// Heuristically extracts a repo-relative script path from a hook `command`
+// string, resolved against the component's own root (so a hook in
+// plugins/shunt/hooks/hooks.json referencing `route.js` resolves to
+// plugins/shunt/route.js, not the repo root). Returns null when the command
+// clearly isn't a local bundled script (a remote URL, an absolute/home path,
+// or a bare external command with no path-like token) — deliberately
+// conservative, a missed match just means the caller can't fetch source and
+// falls back to command-line-only capability inference.
+export function resolveLocalScriptPath(command, componentRoot = '') {
+  if (!command || typeof command !== 'string') return null;
+
+  const tokens = command.trim().split(/\s+/);
+  for (const rawToken of tokens) {
+    const token = rawToken.replace(/^["']|["']$/g, '');
+    if (!token || token.startsWith('-')) continue;
+    if (INTERPRETERS.has(token.toLowerCase())) continue;
+    if (/^https?:\/\//i.test(token)) return null;
+
+    const looksLikePath = token.includes('/') || SCRIPT_EXTENSION.test(token);
+    if (!looksLikePath) continue;
+
+    if (/^[A-Za-z]:[\\/]/.test(token) || token.startsWith('/') || token.startsWith('~') || token.includes('\\')) return null;
+
+    const cleaned = token.replace(/^\.\//, '');
+    return componentRoot ? `${componentRoot}/${cleaned}` : cleaned;
+  }
+
+  return null;
+}

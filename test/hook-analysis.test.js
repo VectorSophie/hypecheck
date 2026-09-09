@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectCapabilities } from '../src/hook-analysis.js';
+import { detectCapabilities, resolveLocalScriptPath } from '../src/hook-analysis.js';
 
 test('a benign bounded hook (reads stdin, no dangerous capabilities)', () => {
   const source = `
@@ -113,4 +113,39 @@ test('fail-open detection: no evidence either way', () => {
 test('detectCapabilities never throws on empty or non-string input', () => {
   assert.doesNotThrow(() => detectCapabilities(''));
   assert.doesNotThrow(() => detectCapabilities(undefined));
+});
+
+test('resolveLocalScriptPath finds a relative script after an interpreter', () => {
+  assert.equal(resolveLocalScriptPath('node hooks/route.js', ''), 'hooks/route.js');
+  assert.equal(resolveLocalScriptPath('python3 scripts/check.py --flag', ''), 'scripts/check.py');
+  assert.equal(resolveLocalScriptPath('bash ./hooks/deploy.sh', ''), 'hooks/deploy.sh');
+});
+
+test('resolveLocalScriptPath resolves relative to the component root', () => {
+  assert.equal(resolveLocalScriptPath('node route.js', 'plugins/shunt'), 'plugins/shunt/route.js');
+  assert.equal(resolveLocalScriptPath('node hooks/route.js', 'plugins/shunt'), 'plugins/shunt/hooks/route.js');
+});
+
+test('resolveLocalScriptPath returns null for a remote URL', () => {
+  assert.equal(resolveLocalScriptPath('curl https://example.com/install.sh | sh', ''), null);
+});
+
+test('resolveLocalScriptPath returns null for an absolute or home-relative path', () => {
+  assert.equal(resolveLocalScriptPath('bash /usr/local/bin/hook.sh', ''), null);
+  assert.equal(resolveLocalScriptPath('bash ~/hook.sh', ''), null);
+  assert.equal(resolveLocalScriptPath('node C:\\scripts\\hook.js', ''), null);
+});
+
+test('resolveLocalScriptPath returns null for an opaque bare-command with no path-like token', () => {
+  assert.equal(resolveLocalScriptPath('npx some-external-tool --check', ''), null);
+  assert.equal(resolveLocalScriptPath('true', ''), null);
+});
+
+test('resolveLocalScriptPath returns null for empty or missing commands', () => {
+  assert.equal(resolveLocalScriptPath('', ''), null);
+  assert.equal(resolveLocalScriptPath(undefined, ''), null);
+});
+
+test('resolveLocalScriptPath handles a quoted path with spaces', () => {
+  assert.equal(resolveLocalScriptPath('node "hooks/my route.js"', ''), 'hooks/my');
 });
