@@ -20,12 +20,13 @@ Tests are co-located in `test/*.test.js` and inject a fake `fetchImpl` via the `
 
 `evaluateCandidate` (src/evaluate.js) is the orchestrator; everything flows through it in order:
 
-1. **candidate.js** — `normalizeCandidate(input)` → `{ type: 'github'|'npm'|'social', canonical, ... }`. Pure string parsing, no I/O. Throws on unsupported input.
-2. **fetchers.js** — `fetchCandidateData(candidate, options)` hits GitHub API / npm registry / social HTML. The ONLY module that does network I/O. Takes `options.fetchImpl` (defaults to `globalThis.fetch`) — this is the test seam.
-3. **extractors.js** — pulls package signals (lifecycle scripts, deps) and social links out of fetched data.
-4. **analyze.js** — `analyzeCandidate(data)` produces a flat `findings[]` array. Each finding: `{ id, severity: low|medium|high, category: security|maintenance|workflow, title, evidence }`. This is the only place heuristics live.
-5. **score.js** — `scoreAnalysis(analysis)` turns findings into 0–10 scores per dimension + the overkill index, then `chooseVerdict` maps scores→verdict.
-6. **report.js** — `renderMarkdownReport(report)` for human output; `--json` bypasses it and dumps the report object.
+1. **candidate.js** — `normalizeCandidate(input)` → `{ type: 'github'|'npm'|'social', canonical, ... }`. Pure string parsing, no I/O. Throws on unsupported input. GitHub candidates may carry an optional `subpath` (from `owner/repo#plugins/shunt` or a `/tree/<ref>/...` URL) to address one component of a monorepo/marketplace directly.
+2. **fetchers.js** — `fetchCandidateData(candidate, options)` hits GitHub API / npm registry / social HTML. The ONLY module that does network I/O. Takes `options.fetchImpl` (defaults to `globalThis.fetch`) — this is the test seam. GitHub candidates run bounded recursive discovery (`discovery.js`) instead of root-only manifest probes — see its module docstring for the bounds (depth/entries/files/bytes/requests).
+3. **discovery.js** — `discoverComponents(fetchImpl, repoUrl, headers, {defaultBranch, repoSizeKb, subpath})` walks the repo's git tree (single recursive call for small repos, bounded breadth-first for large ones), classifies paths by name only, fetches content only for classified files, follows `.claude-plugin/marketplace.json` `source` entries (with a path-traversal guard), and groups results into `components[]`. A repo with 2+ components produces a rollup with one verdict per component instead of one blended verdict — see `evaluate.js`'s `evaluateMultiComponent`.
+4. **extractors.js** — pulls package signals (lifecycle scripts, deps) and social links out of fetched data.
+5. **analyze.js** — `analyzeCandidate(data)` produces a flat `findings[]` array. Each finding: `{ id, severity: low|medium|high, category: security|maintenance|workflow, title, evidence }`. This is the only place heuristics live.
+6. **score.js** — `scoreAnalysis(analysis)` turns findings into 0–10 scores per dimension + the overkill index, then `chooseVerdict` maps scores→verdict.
+7. **report.js** — `renderMarkdownReport(report)` for human output; `--json` bypasses it and dumps the report object.
 
 `social` candidates short-circuit: fetch HTML → extract first GitHub/npm link → recurse into `evaluateCandidate`.
 
