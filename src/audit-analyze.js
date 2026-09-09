@@ -1,4 +1,6 @@
-const ADVERSARIAL_DIR = /(^|\/)(?:fixtures?|tests?|testdata|examples?|corpus|malicious|adversarial)\//i;
+import { ADVERSARIAL_DIR_KEYWORDS } from './discovery.js';
+
+const ADVERSARIAL_DIR = new RegExp(`(^|/)(?:${ADVERSARIAL_DIR_KEYWORDS})/`, 'i');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
 const WALK_BOUNDS = { maxDepth: 6, maxEntries: 2000 };
 
@@ -48,13 +50,18 @@ function readGitignorePatterns(fs, rootDir) {
 
 // Best-effort: is this path (or a parent directory of it) covered by a
 // .gitignore pattern? Real gitignore matching has many edge cases; this is a
-// conservative substring/prefix check, not a full glob engine — a false
-// "not excluded" just means the finding still fires, which is the safe
-// direction to be wrong in.
+// simplified segment-based check, not a full glob engine — it compares
+// whole path segments (never raw substrings) specifically so a short,
+// common pattern like "out" can't false-exclude an unrelated path like
+// "fixtures/about/CLAUDE.md" ("about".includes("out") would wrongly match
+// under naive substring comparison).
 function isGitignored(relativePath, patterns) {
+  const segments = relativePath.split('/');
   return patterns.some((pattern) => {
     const clean = pattern.replace(/^\/+|\/+$/g, '');
-    return clean && relativePath.includes(clean);
+    if (!clean) return false;
+    if (clean.includes('/')) return relativePath === clean || relativePath.startsWith(`${clean}/`);
+    return segments.includes(clean);
   });
 }
 

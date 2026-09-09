@@ -24,7 +24,13 @@ const INTERESTING = [
   [/(^|\/)(?:\.claude\/)?commands\/[^/]+\.md$/, 'command'],
 ];
 
-const ADVERSARIAL_CLAUDE_MD = /(^|\/)(?:fixtures?|tests?|testdata|examples?|corpus|malicious|adversarial)\/.*CLAUDE\.md$/i;
+// Shared with src/audit-analyze.js's detectInstructionBombs (which scans
+// the local project the CLI is run from, not a fetched candidate repo) so
+// the two "does this path look like an adversarial test-fixture" checks
+// can't silently drift apart.
+export const ADVERSARIAL_DIR_KEYWORDS = 'fixtures?|tests?|__tests__|testdata|examples?|samples?|poc|corpus|malicious|adversarial';
+
+const ADVERSARIAL_CLAUDE_MD = new RegExp(`(^|/)(?:${ADVERSARIAL_DIR_KEYWORDS})/.*CLAUDE\\.md$`, 'i');
 
 export function classifyPath(relativePath) {
   for (const [re, kind] of INTERESTING) {

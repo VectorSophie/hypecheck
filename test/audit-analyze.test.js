@@ -62,3 +62,55 @@ test('skips node_modules and .git directories entirely', () => {
 test('returns no findings with no cwd/fs', () => {
   assert.deepEqual(detectInstructionBombs({}), []);
 });
+
+test('flags a nested CLAUDE.md under __tests__ (the common Jest/Node convention)', () => {
+  const fs = {
+    readdirSync: (p) => {
+      if (p === '/proj') return ['__tests__'];
+      if (p === '/proj/__tests__') return ['CLAUDE.md'];
+      return [];
+    },
+    statSync: (p) => ({ isDirectory: () => p === '/proj/__tests__' }),
+    readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  const findings = detectInstructionBombs({ cwd: '/proj', fs });
+  assert.equal(findings.length, 1);
+});
+
+test('a short unrelated .gitignore entry does not false-exclude an adversarial-dir finding', () => {
+  const fs = {
+    readdirSync: (p) => {
+      if (p === '/proj') return ['fixtures'];
+      if (p === '/proj/fixtures') return ['about'];
+      if (p === '/proj/fixtures/about') return ['CLAUDE.md'];
+      return [];
+    },
+    statSync: (p) => ({ isDirectory: () => p === '/proj/fixtures' || p === '/proj/fixtures/about' }),
+    readFileSync: (p) => {
+      // "out" is a common .gitignore entry (build output dir) that must not
+      // substring-match "about" and wrongly suppress this finding.
+      if (p === '/proj/.gitignore') return 'out\n';
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+  };
+  const findings = detectInstructionBombs({ cwd: '/proj', fs });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, 'nested-claude-md-hazard');
+});
+
+test('the bounded walk stops within maxEntries on a directory with a huge number of entries', () => {
+  const hugeEntries = Array.from({ length: 5000 }, (_, i) => `file-${i}.txt`);
+  let readdirCalls = 0;
+  const fs = {
+    readdirSync: (p) => {
+      readdirCalls += 1;
+      if (p === '/proj') return hugeEntries;
+      return [];
+    },
+    statSync: () => ({ isDirectory: () => false }),
+    readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  const findings = detectInstructionBombs({ cwd: '/proj', fs });
+  assert.deepEqual(findings, []);
+  assert.equal(readdirCalls, 1);
+});
