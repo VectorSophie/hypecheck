@@ -23,3 +23,21 @@ test('writeSnapshot never throws on a filesystem error', () => {
   const fsImpl = { mkdirSync: () => { throw new Error('disk full'); }, writeFileSync: () => {} };
   assert.equal(writeSnapshot('x', {}, { snapshotDir: '/snap', fsImpl }), false);
 });
+
+test('rejects a path-traversal snapshot name instead of writing outside snapshotDir', () => {
+  const writes = [];
+  const fsImpl = {
+    mkdirSync: () => {},
+    writeFileSync: (p) => writes.push(p),
+    readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  assert.equal(writeSnapshot('../../etc/whatever', {}, { snapshotDir: '/snap', fsImpl }), false);
+  assert.deepEqual(writes, []);
+  assert.equal(readSnapshot('../../etc/whatever', { snapshotDir: '/snap', fsImpl }), null);
+});
+
+test('rejects a non-string snapshot name rather than stringifying it into a path', () => {
+  const fsImpl = { mkdirSync: () => {}, writeFileSync: () => { throw new Error('should not be called'); } };
+  assert.equal(writeSnapshot(undefined, {}, { snapshotDir: '/snap', fsImpl }), false);
+  assert.equal(readSnapshot(undefined, { snapshotDir: '/snap', fsImpl }), null);
+});
