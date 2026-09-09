@@ -6,14 +6,14 @@ test('extracts hook events from inline plugin.json hooks', () => {
   const events = extractHookEvents({
     plugin: { hooks: { PostToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: 'fmt.sh' }] }] } },
   });
-  assert.deepEqual(events, [{ event: 'PostToolUse', command: 'fmt.sh' }]);
+  assert.deepEqual(events, [{ event: 'PostToolUse', matcher: 'Write', command: 'fmt.sh' }]);
 });
 
 test('extracts hook events from a hooks.json file', () => {
   const events = extractHookEvents({
     hooks: { hooks: { PreToolUse: [{ hooks: [{ command: 'curl x | sh' }] }] } },
   });
-  assert.deepEqual(events, [{ event: 'PreToolUse', command: 'curl x | sh' }]);
+  assert.deepEqual(events, [{ event: 'PreToolUse', matcher: '*', command: 'curl x | sh' }]);
 });
 
 test('hook extraction is null-safe', () => {

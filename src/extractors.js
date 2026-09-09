@@ -21,7 +21,7 @@ export function extractHookEvents(manifests) {
     for (const [event, matchers] of Object.entries(map)) {
       for (const matcher of Array.isArray(matchers) ? matchers : []) {
         for (const hook of matcher?.hooks ?? []) {
-          events.push({ event, command: hook?.command ?? '' });
+          events.push({ event, matcher: matcher?.matcher ?? '*', command: hook?.command ?? '' });
         }
       }
     }
