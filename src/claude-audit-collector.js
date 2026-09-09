@@ -14,14 +14,17 @@ export async function collectClaudeAudit({ cwd, home, fs, execImpl, now = new Da
     const listed = await listPlugins({ execImpl });
     if (listed.state === 'connected') {
       const names = extractPluginNames(listed.plugins);
-      const details = [];
-      for (const name of names) {
-        const detail = await getPluginDetails(name, { execImpl });
-        details.push({ name, ...detail });
-      }
+      // Independent lookups, each with its own 5s default timeout — run
+      // concurrently so N plugins cost ~1 timeout worst-case, not N.
+      const details = await Promise.all(
+        names.map(async (name) => ({ name, ...(await getPluginDetails(name, { execImpl })) })),
+      );
       plugins = { state: 'connected', list: details };
     } else {
-      plugins = listed;
+      // Every non-connected state gets a consistent shape: downstream
+      // consumers can rely on `.list` existing regardless of *which* call
+      // failed, without needing to branch on `state`.
+      plugins = { ...listed, list: [] };
     }
   }
 
@@ -37,7 +40,11 @@ export async function collectClaudeAudit({ cwd, home, fs, execImpl, now = new Da
 
 // `claude plugin list --json` shape varies by version — accept an array, or
 // an object with a plugins/installed/items array, matching the same
-// defensive parsing already used by the reference shell script.
+// defensive parsing already used by the reference shell script's inline
+// PLUGIN_NAMES node script, which this ports faithfully: dedup by name,
+// and append an explicit marketplace
+// suffix when the JSON gives one and the name doesn't already carry one
+// (`claude plugin details` needs the suffix to resolve in that case).
 function extractPluginNames(data) {
   let arr = [];
   if (Array.isArray(data)) arr = data;
@@ -45,11 +52,20 @@ function extractPluginNames(data) {
   else if (Array.isArray(data?.installed)) arr = data.installed;
   else if (Array.isArray(data?.items)) arr = data.items;
 
+  const seen = new Set();
   const names = [];
   for (const p of arr) {
     if (!p || typeof p !== 'object') continue;
-    const name = p.id ?? p.fullName ?? p.full_name ?? p.name ?? p.plugin;
-    if (typeof name === 'string' && name) names.push(name);
+    let name = p.id ?? p.fullName ?? p.full_name ?? p.name ?? p.plugin;
+    if (typeof name !== 'string' || !name) continue;
+
+    const market = p.marketplace ?? p.marketplaceName ?? p.sourceMarketplace;
+    if (market && !name.includes('@')) name += `@${market}`;
+
+    if (!seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
   }
   return names;
 }
