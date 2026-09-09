@@ -203,6 +203,39 @@ test('eval output omits the Token economics section when no evidence is found', 
   assert.doesNotMatch(out, /## Token economics/);
 });
 
+test('eval output renders all Token economics branches: claim, source mechanism, readme mechanism, benchmark, labels', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('/repos/o/r/readme')) {
+      return jsonResponse({ content: Buffer.from('Saves 90% of tokens by routing to a cheaper model and filtering noisy output.').toString('base64') });
+    }
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: 'bench/results.json', type: 'blob', size: 20 },
+        { path: 'hooks/hooks.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/hooks/hooks.json')) {
+      return jsonResponse({ content: Buffer.from(JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: 'node hooks/route.js' }] }] } })).toString('base64') });
+    }
+    if (url.endsWith('/contents/hooks/route.js')) {
+      return jsonResponse({ content: Buffer.from('function route() { return cache(delegate to a cheaper model result); }').toString('base64') });
+    }
+    return jsonResponse(null, false);
+  };
+
+  let out = '';
+  await runCli(['eval', 'o/r', '--no-scan'], { fetchImpl, stdout: (t) => { out += t; }, stderr: () => {} });
+
+  assert.match(out, /## Token economics/);
+  assert.match(out, /Evidence: benchmarked/);
+  assert.match(out, /Claimed savings: 90%/);
+  assert.match(out, /Mechanisms observed in fetched source:.*cheap-model-delegation/);
+  assert.match(out, /Mechanisms mentioned in README \(not verified in source\):.*cheap-model-delegation/);
+  assert.match(out, /Benchmark found:.*bench\/results\.json/);
+  assert.match(out, /Labels:.*TOKEN_WIN/);
+});
+
 function jsonResponse(body, ok = true) {
   return {
     ok,

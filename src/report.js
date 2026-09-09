@@ -35,13 +35,9 @@ export function renderMarkdownReport(report) {
     }
   }
 
-  const tokenEconomics = tokenEconomicsLines(report.tokenEconomics);
-  if (tokenEconomics.length) {
-    // Drop the helper's own trailing blank here: whatever section follows
-    // (Could Not Verify) supplies its own leading blank separator, and if
-    // nothing follows, no dangling blank line is needed at EOF either —
-    // matches the Evidence section's existing no-trailing-blank convention.
-    lines.push('', ...tokenEconomics.slice(0, -1));
+  const tokenEconomicsSection = tokenEconomicsLines(report.tokenEconomics);
+  if (tokenEconomicsSection.length > 0) {
+    lines.push('', ...tokenEconomicsSection);
   }
 
   if (report.unknowns?.length) {
@@ -79,7 +75,6 @@ function tokenEconomicsLines(tokenEconomics) {
     lines.push(`Labels: ${tokenEconomics.labels.join(', ')}`);
   }
 
-  lines.push('');
   return lines;
 }
 
