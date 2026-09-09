@@ -110,8 +110,13 @@ const SCORE_ROWS = [
   ['Maintenance Health', 'maintenanceHealth'], ['Setup Burden', 'setupBurden'], ['Budget/Context', 'budgetPressure'],
 ];
 
-export function renderAudit(findings) {
+export function renderAudit(findings, { diff, claudeCliState } = {}) {
   const lines = ['# Hypecheck audit: your installed setup', ''];
+
+  if (claudeCliState && claudeCliState !== 'connected') {
+    lines.push(`(Claude CLI: ${claudeCliState} — CLI-based checks skipped, only local file scanning ran.)`, '');
+  }
+
   if (findings.length === 0) {
     lines.push('No redundancy, hook collisions, or risky hooks found in your local config.');
   } else {
@@ -119,6 +124,20 @@ export function renderAudit(findings) {
       lines.push(`- [${f.severity.toUpperCase()}] ${f.title}: ${f.evidence}`);
     }
   }
+
+  if (diff?.comparable) {
+    lines.push('', '## Changes since snapshot', '');
+    const changeLines = [];
+    if (diff.addedPlugins.length) changeLines.push(`- Added plugins: ${diff.addedPlugins.join(', ')}`);
+    if (diff.removedPlugins.length) changeLines.push(`- Removed plugins: ${diff.removedPlugins.join(', ')}`);
+    if (diff.addedMcp.length) changeLines.push(`- Added MCP servers: ${diff.addedMcp.join(', ')}`);
+    if (diff.removedMcp.length) changeLines.push(`- Removed MCP servers: ${diff.removedMcp.join(', ')}`);
+    if (diff.claudeVersionChanged) changeLines.push('- Claude CLI version changed');
+    lines.push(...(changeLines.length ? changeLines : ['- No changes detected']));
+  } else if (diff && !diff.comparable) {
+    lines.push('', '(No prior snapshot found with that name — nothing to diff against.)');
+  }
+
   return `${lines.join('\n')}\n`;
 }
 

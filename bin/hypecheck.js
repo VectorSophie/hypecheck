@@ -13,6 +13,9 @@ import { profileUser } from '../src/profile.js';
 import { auditSetup } from '../src/audit.js';
 import { renderMarkdownReport, renderMultiComponentReport, renderComparison, renderAudit } from '../src/report.js';
 import { explainFinding, FINDING_DOCS } from '../src/finding-docs.js';
+import { collectClaudeAudit } from '../src/claude-audit-collector.js';
+import { analyzeClaudeAudit } from '../src/audit-analyze.js';
+import { readSnapshot, writeSnapshot, diffSnapshots } from '../src/audit-snapshot.js';
 
 const NEGATIVE = new Set(['SKIP', 'REDUNDANT', 'DANGEROUS']);
 
@@ -92,10 +95,36 @@ async function cmdCompare(args, options, stdout, stderr) {
   }
 }
 
-function cmdAudit(args, options, stdout) {
-  const localTools = resolveScan(args, options).localTools ?? [];
-  const findings = auditSetup(localTools);
-  stdout(renderAudit(findings));
+async function cmdAudit(args, options, stdout) {
+  const snapshotName = removeOption(args, '--snapshot');
+  const diffName = removeOption(args, '--diff');
+  const { localTools } = resolveScan(args, options);
+  const localFindings = auditSetup(localTools ?? []);
+
+  const scanCwd = options.scanCwd ?? process.cwd();
+  const scanHome = options.scanHome ?? os.homedir();
+  const scanFs = options.fsImpl ?? fs;
+
+  const collected = await collectClaudeAudit({
+    cwd: scanCwd,
+    home: scanHome,
+    fs: scanFs,
+    execImpl: options.execImpl,
+  });
+  const cliFindings = analyzeClaudeAudit(collected, { cwd: scanCwd, fs: scanFs });
+
+  if (snapshotName) {
+    writeSnapshot(snapshotName, collected, { fsImpl: options.fsImpl });
+  }
+
+  let diffResult = null;
+  if (diffName) {
+    const prior = readSnapshot(diffName, { fsImpl: options.fsImpl });
+    diffResult = diffSnapshots(prior, collected);
+  }
+
+  const findings = [...localFindings, ...cliFindings];
+  stdout(renderAudit(findings, { diff: diffResult, claudeCliState: collected.claudeCli.state }));
   return findings.some((f) => f.severity === 'high') ? 1 : 0;
 }
 
@@ -130,11 +159,14 @@ function usage() {
   hypecheck eval <github-url | npm-package | npm-url | x-twitter-url> [--json] [--no-scan] [--scan <path>] [--track]
   hypecheck compare <candidate-a> <candidate-b> [--json] [--no-scan]
   hypecheck explain <finding-id>
+  hypecheck audit [--no-scan] [--snapshot <name>] [--diff <name>]
 
   --json        emit the structured report instead of Markdown
   --no-scan     skip scanning local Claude Code / dev config for redundancy
   --scan <path> scan this project directory instead of the current one
   --track       cache this eval and report drift on the next --track run
+  --snapshot <name>  save this audit as a named snapshot (~/.hypecheck/audits/<name>.json)
+  --diff <name>      compare this audit against a previously saved snapshot
 `;
 }
 
