@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { extractHookEvents } from './extractors.js';
+import { resolveLocalScriptPath } from './hook-analysis.js';
 
 export const BOUNDS = {
   maxDepth: 6,
@@ -7,6 +9,8 @@ export const BOUNDS = {
   maxBytes: 300_000,
   maxRequests: 60,
 };
+
+const HOOK_SCRIPT_BOUNDS = { maxScripts: 20, maxBytes: 100_000 };
 
 const RECURSIVE_SIZE_THRESHOLD_KB = 5000;
 
@@ -172,6 +176,49 @@ function safeJson(text) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+// Second, independent fetch pass: for each component's parsed hooks
+// manifest, try to resolve and fetch the bundled script each hook command
+// references (bounded separately from the manifest/skill/command discovery
+// budget above — hook scripts are fetched only after components already
+// exist, since resolving a script path needs to know the component's root).
+// Deliberately does not record scan/skip reasons the way discoverTree does —
+// this is a best-effort security-analysis aid, not a discovery-completeness
+// concern; a script that can't be fetched just degrades classifyHook to
+// command-line-only inference, never a crash or a wrong "safe" conclusion.
+export async function fetchHookScripts(fetchImpl, repoUrl, headers, components) {
+  for (const component of components) {
+    component.hookScripts = {};
+    const hookEvents = extractHookEvents(component.manifests);
+
+    let scriptsUsed = 0;
+    let bytesUsed = 0;
+
+    for (const { command } of hookEvents) {
+      if (scriptsUsed >= HOOK_SCRIPT_BOUNDS.maxScripts) break;
+
+      const scriptPath = resolveLocalScriptPath(command, component.path);
+      if (!scriptPath || component.hookScripts[scriptPath] || !isPathSafe(scriptPath)) continue;
+
+      try {
+        const response = await fetchImpl(`${repoUrl}/contents/${scriptPath}`, headers ? { headers } : undefined);
+        if (!response.ok) continue;
+        const body = await response.json();
+        const text = Buffer.from(body.content ?? '', 'base64').toString('utf8');
+
+        if (bytesUsed + text.length > HOOK_SCRIPT_BOUNDS.maxBytes) continue;
+
+        component.hookScripts[scriptPath] = text;
+        scriptsUsed += 1;
+        bytesUsed += text.length;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return components;
+}
+
 export async function discoverComponents(fetchImpl, repoUrl, headers, { defaultBranch, repoSizeKb, subpath }) {
   const tree = await discoverTree(fetchImpl, repoUrl, headers, { defaultBranch, repoSizeKb, subpath });
   const contents = await fetchInterestingFiles(fetchImpl, repoUrl, headers, tree.found);
@@ -200,6 +247,8 @@ export async function discoverComponents(fetchImpl, repoUrl, headers, { defaultB
 
   const roots = [...pluginRoots].sort();
   const components = roots.map((root) => buildComponent(root, contents.files, roots));
+
+  await fetchHookScripts(fetchImpl, repoUrl, headers, components);
 
   return {
     components,
