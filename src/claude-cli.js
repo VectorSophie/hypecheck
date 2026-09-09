@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import nodeFs from 'node:fs';
 import { redactText } from './redact.js';
 
 const execFileAsync = promisify(execFile);
@@ -66,14 +65,24 @@ export async function getPluginDetails(pluginId, options = {}) {
   return { state: 'connected', details: result.stdout };
 }
 
-// Mirrors src/local-context.js's exact fs-injection convention: plain
-// string path-joining (never node:path), since `fs` here is a test seam
-// receiving fixture-string paths, not real filesystem paths that need
-// platform-correct separators.
+// Mirrors src/local-context.js's fs-injection convention: plain string
+// path-joining (never node:path, since `fs` here is a test seam receiving
+// fixture-string paths), and — unlike claude-cli.js's other functions — no
+// default for `fs`. local-context.js takes the same stance deliberately: a
+// caller (bin/hypecheck.js) that forgets to inject `fs` should fail loudly
+// in a test, not silently fall through to reading the real filesystem.
 const join = (...parts) => parts.join('/');
+
+// ~/.claude.json in particular can grow large from accumulated session
+// history; skip anything past a generous bound rather than synchronously
+// reading a runaway file on every `hypecheck audit` invocation. Guarded by
+// `typeof fs.statSync === 'function'` so fs test doubles that only implement
+// readFileSync (the common case in this codebase's tests) are unaffected.
+const MAX_CONFIG_BYTES = 5 * 1024 * 1024;
 
 function readJsonConfig(filePath, fs) {
   try {
+    if (typeof fs.statSync === 'function' && fs.statSync(filePath).size > MAX_CONFIG_BYTES) return null;
     return JSON.parse(fs.readFileSync(filePath));
   } catch {
     return null;
@@ -84,16 +93,24 @@ function readJsonConfig(filePath, fs) {
 // (what the files SAY), not "recognized"/"enabled" (what the CLI actually
 // does with them — that cross-reference happens in the collector, Task 4).
 // Never throws; a missing/malformed file is just absent from the result.
-export function readClaudeConfigFiles({ cwd, home, fs = nodeFs } = {}) {
+//
+// Returns RAW, UNREDACTED file contents (unlike every other function in this
+// module, which redacts before returning) — .mcp.json/settings.local.json/
+// ~/.claude.json are exactly where secrets (MCP server env vars, auth
+// headers) live. This is deliberate groundwork, not an oversight: Task 4's
+// collectClaudeAudit() is responsible for running redact() over its entire
+// result — including whatever this function returns — before anything
+// touches it. Do not serialize this function's return value directly.
+export function readClaudeConfigFiles({ cwd, home, fs } = {}) {
   const files = {};
   if (cwd) {
-    files.projectSettings = readJsonConfig(join(cwd, '.claude', 'settings.json'), fs);
-    files.projectSettingsLocal = readJsonConfig(join(cwd, '.claude', 'settings.local.json'), fs);
-    files.projectMcp = readJsonConfig(join(cwd, '.mcp.json'), fs);
+    files.projectSettings = readJsonConfig(join(cwd, '.claude', 'settings.json'), fs); // .claude/settings.json
+    files.projectSettingsLocal = readJsonConfig(join(cwd, '.claude', 'settings.local.json'), fs); // .claude/settings.local.json
+    files.projectMcp = readJsonConfig(join(cwd, '.mcp.json'), fs); // .mcp.json
   }
   if (home) {
-    files.globalSettings = readJsonConfig(join(home, '.claude', 'settings.json'), fs);
-    files.globalClaudeJson = readJsonConfig(join(home, '.claude.json'), fs);
+    files.globalSettings = readJsonConfig(join(home, '.claude', 'settings.json'), fs); // ~/.claude/settings.json
+    files.globalClaudeJson = readJsonConfig(join(home, '.claude.json'), fs); // ~/.claude.json
   }
   return files;
 }

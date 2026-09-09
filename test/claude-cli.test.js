@@ -93,3 +93,31 @@ test('readClaudeConfigFiles is a no-op with no cwd/home', () => {
   const fs = { readFileSync: () => { throw new Error('should not be called'); } };
   assert.deepEqual(readClaudeConfigFiles({ fs }), {});
 });
+
+test('readClaudeConfigFiles reads .mcp.json and global settings.json at their exact paths', () => {
+  const fs = {
+    readFileSync: (p) => {
+      if (p === '/proj/.mcp.json') return JSON.stringify({ mcpServers: { local: {} } });
+      if (p === '/home/.claude/settings.json') return JSON.stringify({ model: 'opus' });
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+  };
+  const result = readClaudeConfigFiles({ cwd: '/proj', home: '/home', fs });
+  assert.deepEqual(result.projectMcp, { mcpServers: { local: {} } });
+  assert.deepEqual(result.globalSettings, { model: 'opus' });
+});
+
+test('readClaudeConfigFiles skips a config file over the size bound instead of reading it', () => {
+  const fs = {
+    statSync: (p) => ({ size: p === '/proj/.claude/settings.json' ? 10 * 1024 * 1024 : 10 }),
+    readFileSync: () => { throw new Error('should not be called for an oversized file'); },
+  };
+  const result = readClaudeConfigFiles({ cwd: '/proj', fs });
+  assert.equal(result.projectSettings, null);
+});
+
+test('readClaudeConfigFiles works with an fs double that has no statSync (existing test convention)', () => {
+  const fs = { readFileSync: () => JSON.stringify({ ok: true }) };
+  const result = readClaudeConfigFiles({ cwd: '/proj', fs });
+  assert.deepEqual(result.projectSettings, { ok: true });
+});
