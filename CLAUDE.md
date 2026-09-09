@@ -32,6 +32,17 @@ Tests are co-located in `test/*.test.js` and inject a fake `fetchImpl` via the `
 
 `social` candidates short-circuit: fetch HTML → extract first GitHub/npm link → recurse into `evaluateCandidate`.
 
+## Local audit adapter
+
+`hypecheck audit` inspects the user's OWN local Claude Code setup, not a candidate. Two independent data sources feed into it:
+
+1. **`local-context.js`/`audit.js`** (unchanged since Phase 1) — fast, synchronous, file-based: reads `.claude/settings.json`, `.mcp.json`, command/skill directories directly off disk. No `claude` CLI involved.
+2. **`claude-cli.js`/`claude-audit-collector.js`/`audit-analyze.js`** (Phase 4) — async, talks to the real `claude` CLI (`--version`, `plugin list --json`, `plugin details <id>`) via a `shell:false`, timeout-bounded subprocess wrapper (`claude-cli.js`), NEVER calls `claude mcp list`/`get` (those can contact configured MCP servers — deliberately out of scope until a future `--probe` opt-in exists), and reads static config files (`readClaudeConfigFiles`, no `fs` default — callers must inject it, matching `local-context.js`'s convention). `claude-audit-collector.js`'s `collectClaudeAudit()` is the single entry point; its result is ALWAYS passed through `redact.js`'s `redact()` before anything touches it — `redact.js` also exports `redactText()` for scrubbing secret-shaped substrings (including full PEM key blocks, not just their header line) out of raw string blobs like subprocess stderr. `audit-analyze.js` turns the collected state into findings: adversarial nested `CLAUDE.md` files (`detectInstructionBombs`, sharing its adversarial-directory keyword list with `discovery.js`'s own candidate-side check via `ADVERSARIAL_DIR_KEYWORDS`), stale project-specific references in global config (`detectStaleGlobalContext`), and plugin/MCP inventory (large projected-token plugins, effort/model reported as budget context — never as a vulnerability).
+
+`audit --snapshot <name>` / `audit --diff <name>` (in `audit-snapshot.js`, mirroring `cache.js`'s home-relative `~/.hypecheck/...` persistence convention) let a user capture a before/after pair around manually installing a candidate — the closest thing to a measurable `TRIAL` verdict this codebase has. Snapshot names are allowlisted (`[A-Za-z0-9_-]+`) since they come straight from user-controlled CLI input and are interpolated into a filesystem path.
+
+**Known gaps, deliberately deferred:** no `--probe` mode (so `claude mcp list`/`get` are never called at all, not even opt-in, yet), no `.hypecheck/policy.json` preference file, no Windows-native-vs-MSYS executable path compatibility findings. `test/reference/claude-audit.sh` is the original shell-script design oracle this adapter reaps — it documents intended behavior but is never executed by this codebase or CI.
+
 ## Conventions that matter
 
 - **Findings drive everything downstream.** To change a verdict, add/adjust a finding in analyze.js, then check `SEVERITY_WEIGHT` and `chooseVerdict` thresholds in score.js — don't special-case verdicts elsewhere.
