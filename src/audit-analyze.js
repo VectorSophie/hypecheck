@@ -91,3 +91,31 @@ export function detectInstructionBombs({ cwd, fs }) {
 
   return findings;
 }
+
+// Detects a global (~/.claude) settings block that embeds a specific repo
+// path/name not matching the project Hypecheck is currently running
+// against — e.g. a global "Auto Mode" instructions block that says "this
+// repo is X" while Claude was actually launched from unrelated repo Y.
+const REPO_REFERENCE = /\b(?:this repo(?:sitory)? is|repo(?:sitory)?:)\s*["'`]?([A-Za-z0-9._-]+)["'`]?/i;
+
+export function detectStaleGlobalContext({ cwd, configFiles }) {
+  if (!cwd || !configFiles) return [];
+
+  const projectName = cwd.split('/').filter(Boolean).pop();
+  if (!projectName) return [];
+
+  const globalText = JSON.stringify(configFiles.globalSettings ?? {});
+  const match = globalText.match(REPO_REFERENCE);
+  if (!match) return [];
+
+  const referencedRepo = match[1];
+  if (!referencedRepo || referencedRepo.toLowerCase() === projectName.toLowerCase()) return [];
+
+  return [{
+    id: 'stale-global-context',
+    severity: 'medium',
+    category: 'workflow',
+    title: 'Global Claude config references a different repo',
+    evidence: `Your global Claude settings reference "${referencedRepo}", but you're running from "${projectName}". A stale project-specific instructions block in global config can silently apply to the wrong repo.`,
+  }];
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectInstructionBombs } from '../src/audit-analyze.js';
+import { detectInstructionBombs, detectStaleGlobalContext } from '../src/audit-analyze.js';
 
 test('flags a nested CLAUDE.md under a fixtures directory', () => {
   const fs = {
@@ -113,4 +113,34 @@ test('the bounded walk stops within maxEntries on a directory with a huge number
   const findings = detectInstructionBombs({ cwd: '/proj', fs });
   assert.deepEqual(findings, []);
   assert.equal(readdirCalls, 1);
+});
+
+test('flags a global settings block referencing a different repo', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: '/home/user/hypecheck',
+    configFiles: { globalSettings: { env: { AUTO_MODE_NOTE: 'this repo is other-project' } } },
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, 'stale-global-context');
+  assert.match(findings[0].evidence, /other-project/);
+});
+
+test('does not flag when the referenced repo matches the current project', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: '/home/user/hypecheck',
+    configFiles: { globalSettings: { env: { note: 'this repo is hypecheck' } } },
+  });
+  assert.deepEqual(findings, []);
+});
+
+test('does not flag when there is no repo reference at all', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: '/home/user/hypecheck',
+    configFiles: { globalSettings: { model: 'opus' } },
+  });
+  assert.deepEqual(findings, []);
+});
+
+test('returns no findings with missing cwd/configFiles', () => {
+  assert.deepEqual(detectStaleGlobalContext({}), []);
 });
