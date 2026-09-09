@@ -20,3 +20,27 @@ export function extractClaimedSavings(text) {
 
   return { percentage, quote: match[0].trim() };
 }
+
+const MECHANISM_FAMILIES = {
+  'cheap-model-delegation': ['cheap model', 'cheaper model', 'haiku', 'smaller model', 'delegate to a', 'routes to a cheap'],
+  'subagent-isolation': ['subagent', 'sub-agent', 'isolated context', 'spawns a subagent'],
+  caching: ['cache', 'cached', 'caching', 'memoiz'],
+  'deferred-loading': ['lazy load', 'loaded on demand', 'on-demand', 'deferred loading', 'tool search'],
+  compression: ['compress', 'summariz', 'truncat', 'minif'],
+  retrieval: ['retrieval', 'semantic search', 'vector index', 'vector store', 'embedding'],
+  filtering: ['filter', 'strips', 'strip irrelevant', 'prune', 'noisy output'],
+};
+
+// Keyword-family detection of token-saving mechanisms in free text. Same
+// deterministic, no-embeddings approach as src/capabilities.js's FAMILIES —
+// grow one line at a time, not a scoring model.
+export function detectMechanismKeywords(text) {
+  const haystack = ` ${String(text ?? '').toLowerCase()} `;
+  const mechanisms = new Set();
+  for (const [family, keywords] of Object.entries(MECHANISM_FAMILIES)) {
+    if (keywords.some((kw) => haystack.includes(kw))) {
+      mechanisms.add(family);
+    }
+  }
+  return mechanisms;
+}
