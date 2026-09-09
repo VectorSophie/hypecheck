@@ -149,3 +149,13 @@ test('resolveLocalScriptPath returns null for empty or missing commands', () => 
 test('resolveLocalScriptPath handles a quoted path with spaces', () => {
   assert.equal(resolveLocalScriptPath('node "hooks/my route.js"', ''), 'hooks/my');
 });
+
+test('resolveLocalScriptPath skips an env-var-assignment prefix and finds the real script', () => {
+  assert.equal(resolveLocalScriptPath('PATH=/foo/bar node script.js', ''), 'script.js');
+  assert.equal(resolveLocalScriptPath('CONFIG=./config.json node hooks/route.js', ''), 'hooks/route.js');
+  assert.equal(resolveLocalScriptPath('FOO=bar node script.js', ''), 'script.js');
+});
+
+test('resolveLocalScriptPath: chained commands only surface the first script (documented limitation)', () => {
+  assert.equal(resolveLocalScriptPath('node prep.js && node hooks/route.js', ''), 'prep.js');
+});

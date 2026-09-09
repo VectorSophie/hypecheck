@@ -54,6 +54,11 @@ const SCRIPT_EXTENSION = /\.(?:js|mjs|cjs|py|sh|rb|pl|ps1)$/i;
 // or a bare external command with no path-like token) — deliberately
 // conservative, a missed match just means the caller can't fetch source and
 // falls back to command-line-only capability inference.
+// Known limitation: only the FIRST resolvable script in a command is
+// returned — a chained command (`node a.js && node b.js`) only surfaces
+// `a.js`; the second script is invisible to analysis. Not fixed here since
+// no caller exists yet to consume multiple paths; revisit if/when a real
+// hook fixture needs it.
 export function resolveLocalScriptPath(command, componentRoot = '') {
   if (!command || typeof command !== 'string') return null;
 
@@ -61,6 +66,7 @@ export function resolveLocalScriptPath(command, componentRoot = '') {
   for (const rawToken of tokens) {
     const token = rawToken.replace(/^["']|["']$/g, '');
     if (!token || token.startsWith('-')) continue;
+    if (/^[A-Z_][A-Z0-9_]*=/.test(token)) continue; // env-var assignment prefix (e.g. PATH=/foo/bar node script.js), not the command itself
     if (INTERPRETERS.has(token.toLowerCase())) continue;
     if (/^https?:\/\//i.test(token)) return null;
 
