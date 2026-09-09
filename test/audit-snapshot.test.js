@@ -66,3 +66,24 @@ test('diffSnapshots reports a claude CLI version change', () => {
 test('diffSnapshots reports not comparable when either snapshot is missing', () => {
   assert.deepEqual(diffSnapshots(null, {}), { comparable: false });
 });
+
+test('diffSnapshots does not flag a plugin with a changed state as added/removed', () => {
+  const before = { plugins: { list: [{ name: 'a', state: 'connected' }] } };
+  const after = { plugins: { list: [{ name: 'a', state: 'failed' }] } };
+  const diff = diffSnapshots(before, after);
+  assert.deepEqual(diff.addedPlugins, []);
+  assert.deepEqual(diff.removedPlugins, []);
+});
+
+test('diffSnapshots treats a missing claudeCli.version on one side as a change', () => {
+  const diff = diffSnapshots({ claudeCli: { state: 'unavailable' } }, { claudeCli: { version: '1.0.0' } });
+  assert.equal(diff.claudeVersionChanged, true);
+});
+
+test('diffSnapshots does not detect a same-named MCP server moved between project and global scope (documented limitation)', () => {
+  const before = { configFiles: { projectMcp: { mcpServers: { db: { command: 'old' } } } } };
+  const after = { configFiles: { globalClaudeJson: { mcpServers: { db: { command: 'new' } } } } };
+  const diff = diffSnapshots(before, after);
+  assert.deepEqual(diff.addedMcp, []);
+  assert.deepEqual(diff.removedMcp, []);
+});

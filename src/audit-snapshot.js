@@ -53,6 +53,12 @@ export function diffSnapshots(before, after) {
   const addedPlugins = [...afterPlugins].filter((n) => !beforePlugins.has(n));
   const removedPlugins = [...beforePlugins].filter((n) => !afterPlugins.has(n));
 
+  // KNOWN LIMITATION: project-scope and global-scope MCP servers are merged
+  // into one name-only namespace. A same-named server that moves from
+  // project to global config (or vice versa) between snapshots reads as
+  // "no change" here, since only presence-by-name is compared, not scope.
+  // Reporting scope separately is a legitimate future improvement, not
+  // implemented in this pass.
   const mcpNames = (snap) => Object.keys({
     ...(snap.configFiles?.projectMcp?.mcpServers ?? {}),
     ...(snap.configFiles?.globalClaudeJson?.mcpServers ?? {}),
