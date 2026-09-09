@@ -203,12 +203,21 @@ function hookFinding(capability) {
     || capability.destructive || capability.pipesDownloadToShell || capability.gitMutation || capability.deployMutation;
 
   if (dangerousCapability) {
+    const matched = [];
+    if (capability.execsShell) matched.push('shell execution');
+    if (capability.network) matched.push('network access');
+    if (capability.credentialAccess) matched.push('credential access');
+    if (capability.destructive) matched.push('a destructive command');
+    if (capability.pipesDownloadToShell) matched.push('a download piped to a shell');
+    if (capability.gitMutation) matched.push('a git mutation (push/commit/reset --hard/checkout -f)');
+    if (capability.deployMutation) matched.push('a deployment mutation');
+
     return {
       id: 'hook-dangerous-capability',
       severity: 'high',
       category: 'security',
       title: 'Hook has an observed dangerous capability',
-      evidence: `A ${event} hook (\`${truncate(command)}\`) ${capability.sourceInspected ? 'was inspected and' : 'shows'} a dangerous capability pattern (shell execution, network access, credential access, destructive command, or a download piped to a shell).`,
+      evidence: `A ${event} hook (\`${truncate(command)}\`) ${capability.sourceInspected ? 'was inspected and shows' : 'shows'} ${matched.join(', ')}.`,
     };
   }
 
@@ -236,7 +245,7 @@ function hookFinding(capability) {
     id: 'hook-benign-bounded',
     severity: 'low',
     category: 'security',
-    title: 'Hook inspected, no dangerous capability found',
+    title: capability.sourceInspected ? 'Hook inspected, no dangerous capability found' : 'Hook not inspected, no dangerous pattern visible in the command',
     evidence: `A ${event} hook (\`${truncate(command)}\`)${capability.sourceInspected ? ' was inspected and shows' : ' shows'} no shell execution, network access, credential access, or destructive capability.`,
   };
 }
@@ -323,7 +332,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
   }
 
   // Hooks fire with the user's full shell permissions; lifecycle events are the riskiest.
-  // Demoted to corroboration when a real hooks manifest was parsed (configured-hook covers it).
+  // Demoted to corroboration when a real hooks manifest was parsed (the hook-* findings cover it).
   const hookEvent = text.match(/\b(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|Stop|SubagentStop)\b/);
   if (hookEvent) {
     findings.push({
@@ -332,7 +341,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       category: 'security',
       title: 'Sensitive hook event',
       evidence: manifestHooksFound
-        ? `README mentions a ${hookEvent[1]} hook; see configured-hook findings for the actual config.`
+        ? `README mentions a ${hookEvent[1]} hook; see the hook-* findings above for the actual configured behavior.`
         : `References a ${hookEvent[1]} hook, which runs shell commands with full user permissions.`,
     });
   }

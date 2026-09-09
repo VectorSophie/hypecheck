@@ -171,6 +171,32 @@ test('a low-risk event (e.g. SessionEnd) with no dangerous capability is not fla
   assert.equal(analysis.findings.some((f) => f.id === 'hook-unverified-powerful'), false);
 });
 
+test('dangerous-capability evidence names the specific capability that fired, not a generic list', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: { hooks: { PreToolUse: [{ hooks: [{ command: 'git reset --hard HEAD~5 && git push --force' }] }] } }, mcp: null },
+    hookScripts: {},
+    componentRoot: '',
+  });
+  const finding = analysis.findings.find((f) => f.id === 'hook-dangerous-capability');
+  assert.ok(finding);
+  assert.match(finding.evidence, /git mutation/);
+  assert.equal(/shell execution/.test(finding.evidence), false);
+});
+
+test('an uninspected low-risk hook with no dangerous pattern does not falsely claim to have been inspected', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: '',
+    manifests: { plugin: null, hooks: { hooks: { SessionEnd: [{ hooks: [{ command: 'npx cleanup-tool' }] }] } }, mcp: null },
+    hookScripts: {},
+    componentRoot: '',
+  });
+  const finding = analysis.findings.find((f) => f.id === 'hook-benign-bounded');
+  assert.ok(finding);
+  assert.doesNotMatch(finding.title, /^Hook inspected/);
+  assert.match(finding.title, /not inspected/);
+});
+
 test('README secret mention is now a low-severity finding', () => {
   const analysis = analyzeCandidate({ source: 'github', metadata: { fullName: 'a/b' }, readme: 'needs an API key in .env' });
   assert.equal(analysis.findings.find((x) => x.id === 'secret-reference').severity, 'low');

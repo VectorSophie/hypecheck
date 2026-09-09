@@ -28,7 +28,7 @@ export const FINDING_DOCS = {
     verify: 'read the surrounding text / tool descriptions for instructions aimed at the model rather than the user.',
   },
   'dangerous-hook-event': {
-    why: 'the README references a sensitive hook event. When a real manifest is parsed this drops to corroboration; see configured-hook.',
+    why: 'the README references a sensitive hook event. When a real manifest is parsed this drops to corroboration; see the hook-* findings for the actual configured behavior.',
     verify: 'open hooks/hooks.json or plugin.json and confirm whether the hook is actually configured.',
   },
   'agent-tooling-scope': {
@@ -39,13 +39,21 @@ export const FINDING_DOCS = {
     why: 'long-dormant tools accumulate unpatched issues and may be abandoned.',
     verify: 'check the latest commit/release date on the repo or registry.',
   },
-  'configured-hook': {
-    why: 'a committed hook runs a shell command with your full permissions; tool-call events (PreToolUse/PostToolUse) fire constantly.',
-    verify: 'open hooks/hooks.json (or the hooks block in plugin.json) and read the command for this event.',
+  'hook-dangerous-capability': {
+    why: 'the hook\'s actual behavior (inspected source, or a pattern visible in the command itself) shows a genuinely dangerous capability — shell execution, network access, credential access, a destructive command, a download piped to a shell, or a git/deploy mutation.',
+    verify: 'read the hook\'s bundled script (or the raw command if no script was inspected) and confirm exactly which capability the evidence points at.',
   },
-  'shell-in-hook': {
-    why: 'a hook command that pipes to a shell or decodes a payload (curl | sh, base64 -d) is a direct remote-code-execution path.',
-    verify: 'read the full hook command; trace what the piped/decoded payload does.',
+  'hook-permission-bypass': {
+    why: 'the hook returns permissionDecision: "allow", which bypasses Claude\'s normal permission prompt entirely for whatever it matches.',
+    verify: 'read the hook script and confirm what conditions cause it to auto-allow, and whether those conditions can be influenced by untrusted input.',
+  },
+  'hook-unverified-powerful': {
+    why: 'this hook runs on a high-impact event (PreToolUse/PostToolUse/PostToolUseFailure/UserPromptSubmit) with full user permissions, but its source could not be inspected — its actual behavior is unknown, not confirmed safe.',
+    verify: 'find the referenced script in the repo yourself and read it, or run the tool in a sandbox and observe what the hook actually does.',
+  },
+  'hook-benign-bounded': {
+    why: 'no dangerous capability pattern was found for this hook. If source was inspected, this is a real (if heuristic) finding; if not, it just means the command itself contains no obviously dangerous pattern.',
+    verify: 'check whether the finding says the hook was inspected or not — an uninspected hook with no visible danger in its command line is not the same as a verified-safe one.',
   },
   'mcp-servers': {
     why: 'each bundled MCP server is an external tool surface; several, or any needing credentials, widen the blast radius.',
