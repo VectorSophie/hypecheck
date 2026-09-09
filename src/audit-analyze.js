@@ -96,12 +96,18 @@ export function detectInstructionBombs({ cwd, fs }) {
 // path/name not matching the project Hypecheck is currently running
 // against — e.g. a global "Auto Mode" instructions block that says "this
 // repo is X" while Claude was actually launched from unrelated repo Y.
-const REPO_REFERENCE = /\b(?:this repo(?:sitory)? is|repo(?:sitory)?:)\s*["'`]?([A-Za-z0-9._-]+)["'`]?/i;
+// `/` is included in the capture so an "org/repo"-style reference (e.g.
+// "this repo is acme/hypecheck") is captured whole rather than truncated at
+// the slash — the comparison below then matches on its last segment, same
+// as it does for `cwd`.
+const REPO_REFERENCE = /\b(?:this repo(?:sitory)? is|repo(?:sitory)?:)\s*["'`]?([A-Za-z0-9._/-]+)["'`]?/i;
 
 export function detectStaleGlobalContext({ cwd, configFiles }) {
   if (!cwd || !configFiles) return [];
 
-  const projectName = cwd.split('/').filter(Boolean).pop();
+  // cwd may be backslash-separated on Windows (process.cwd()'s native
+  // format there) — split on either separator, not just POSIX '/'.
+  const projectName = cwd.split(/[\\/]/).filter(Boolean).pop();
   if (!projectName) return [];
 
   const globalText = JSON.stringify(configFiles.globalSettings ?? {});
@@ -109,7 +115,9 @@ export function detectStaleGlobalContext({ cwd, configFiles }) {
   if (!match) return [];
 
   const referencedRepo = match[1];
-  if (!referencedRepo || referencedRepo.toLowerCase() === projectName.toLowerCase()) return [];
+  if (!referencedRepo) return [];
+  const referencedName = referencedRepo.split('/').filter(Boolean).pop() ?? referencedRepo;
+  if (referencedName.toLowerCase() === projectName.toLowerCase()) return [];
 
   return [{
     id: 'stale-global-context',

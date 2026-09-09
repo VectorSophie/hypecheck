@@ -144,3 +144,27 @@ test('does not flag when there is no repo reference at all', () => {
 test('returns no findings with missing cwd/configFiles', () => {
   assert.deepEqual(detectStaleGlobalContext({}), []);
 });
+
+test('correctly derives the project name from a Windows backslash-separated cwd', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: 'C:\\Workspace\\hypecheck',
+    configFiles: { globalSettings: { note: 'this repo is hypecheck' } },
+  });
+  assert.deepEqual(findings, [], 'a matching repo name must not be flagged just because cwd used backslashes');
+});
+
+test('flags a mismatched repo on a Windows backslash-separated cwd', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: 'C:\\Workspace\\hypecheck',
+    configFiles: { globalSettings: { note: 'this repo is other-project' } },
+  });
+  assert.equal(findings.length, 1);
+});
+
+test('does not flag an org/repo-style reference whose last segment matches the current project', () => {
+  const findings = detectStaleGlobalContext({
+    cwd: '/home/user/hypecheck',
+    configFiles: { globalSettings: { note: 'this repo is acme/hypecheck' } },
+  });
+  assert.deepEqual(findings, []);
+});
