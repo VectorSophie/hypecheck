@@ -81,3 +81,35 @@ export function resolveLocalScriptPath(command, componentRoot = '') {
 
   return null;
 }
+
+// Combines script-path resolution and capability detection into one
+// capability struct per hook. When the bundled script's source was actually
+// fetched (present in `hookScripts`, keyed by the same repo-relative path
+// `resolveLocalScriptPath` computes), analysis runs on real source
+// (`sourceInspected: true`, `provenance: 'source'`) — this is what's allowed
+// to gate a DANGEROUS verdict. Otherwise, analysis falls back to the raw
+// command string alone (`sourceInspected: false`, `provenance: 'inferred'`)
+// — still useful (a `curl | sh` pattern is visible without any file access)
+// but never as trustworthy as inspected source.
+export function classifyHook(hookEntry, componentRoot, hookScripts) {
+  const event = hookEntry?.event ?? '';
+  const matcher = hookEntry?.matcher ?? '*';
+  const command = hookEntry?.command ?? '';
+
+  const scriptPath = resolveLocalScriptPath(command, componentRoot);
+  const sourceText = scriptPath ? hookScripts?.[scriptPath] : undefined;
+  const sourceInspected = typeof sourceText === 'string';
+  const analysisText = sourceInspected ? sourceText : command;
+
+  const target = scriptPath ? 'bundled-script' : (command ? 'opaque-command' : 'unknown');
+
+  return {
+    event,
+    matcher,
+    command,
+    target,
+    sourceInspected,
+    provenance: sourceInspected ? 'source' : 'inferred',
+    ...detectCapabilities(analysisText),
+  };
+}
