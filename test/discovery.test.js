@@ -20,7 +20,7 @@ test('bounds are the documented constants', () => {
   });
 });
 
-test('classifies plugin, marketplace, hooks, mcp, skill, command, package manifests', () => {
+test('classifies plugin, marketplace, hooks, mcp, skill, command manifests; leaves package.json unclassified', () => {
   assert.equal(classifyPath('.claude-plugin/plugin.json'), 'plugin');
   assert.equal(classifyPath('plugins/shunt/.claude-plugin/plugin.json'), 'plugin');
   assert.equal(classifyPath('.claude-plugin/marketplace.json'), 'marketplace');
@@ -32,8 +32,13 @@ test('classifies plugin, marketplace, hooks, mcp, skill, command, package manife
   assert.equal(classifyPath('.claude/skills/lint/SKILL.md'), 'skill');
   assert.equal(classifyPath('commands/deploy.md'), 'command');
   assert.equal(classifyPath('.claude/commands/deploy.md'), 'command');
-  assert.equal(classifyPath('package.json'), 'package');
-  assert.equal(classifyPath('plugins/shunt/package.json'), 'package');
+  // package.json is intentionally NOT classified as interesting: nothing
+  // downstream (buildComponent, analyze.js, report.js) reads a per-component
+  // package.json, so fetching it here would only waste the shared
+  // maxFiles/maxBytes discovery budget. The root package.json used for
+  // npm-lifecycle-script parity checks is fetched independently in fetchers.js.
+  assert.equal(classifyPath('package.json'), null);
+  assert.equal(classifyPath('plugins/shunt/package.json'), null);
 });
 
 test('classifies adversarial-path CLAUDE.md but not an ordinary one', () => {

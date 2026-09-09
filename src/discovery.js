@@ -18,7 +18,6 @@ const INTERESTING = [
   [/(^|\/)\.mcp\.json$/, 'mcp'],
   [/(^|\/)(?:\.claude\/)?skills\/[^/]+\/SKILL\.md$/, 'skill'],
   [/(^|\/)(?:\.claude\/)?commands\/[^/]+\.md$/, 'command'],
-  [/(^|\/)package\.json$/, 'package'],
 ];
 
 const ADVERSARIAL_CLAUDE_MD = /(^|\/)(?:fixtures?|tests?|testdata|examples?|corpus|malicious|adversarial)\/.*CLAUDE\.md$/i;
