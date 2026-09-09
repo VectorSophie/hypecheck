@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectInstructionBombs, detectStaleGlobalContext } from '../src/audit-analyze.js';
+import {
+  detectInstructionBombs,
+  detectStaleGlobalContext,
+  analyzeClaudeInventory,
+  analyzeClaudeAudit,
+} from '../src/audit-analyze.js';
 
 test('flags a nested CLAUDE.md under a fixtures directory', () => {
   const fs = {
@@ -166,5 +171,42 @@ test('does not flag an org/repo-style reference whose last segment matches the c
     cwd: '/home/user/hypecheck',
     configFiles: { globalSettings: { note: 'this repo is acme/hypecheck' } },
   });
+  assert.deepEqual(findings, []);
+});
+
+test('flags a plugin with a large projected token cost', () => {
+  const findings = analyzeClaudeInventory({
+    plugins: { list: [{ name: 'big-plugin', details: 'projected tokens: 5,000' }] },
+  });
+  assert.ok(findings.some((f) => f.id === 'plugin-high-token-cost' && /5,000/.test(f.evidence)));
+});
+
+test('does not flag a plugin with a small projected token cost', () => {
+  const findings = analyzeClaudeInventory({
+    plugins: { list: [{ name: 'small-plugin', details: 'projected tokens: 200' }] },
+  });
+  assert.deepEqual(findings.filter((f) => f.id === 'plugin-high-token-cost'), []);
+});
+
+test('reports effort as budget context, never as a vulnerability', () => {
+  const findings = analyzeClaudeInventory({ configFiles: { globalSettings: { effort: 'high' } } });
+  const finding = findings.find((f) => f.id === 'effort-budget-context');
+  assert.ok(finding);
+  assert.equal(finding.category, 'workflow');
+  assert.notEqual(finding.severity, 'high');
+});
+
+test('handles missing plugin/config data gracefully', () => {
+  assert.deepEqual(analyzeClaudeInventory({}), []);
+  assert.deepEqual(analyzeClaudeInventory(undefined), []);
+});
+
+test('analyzeClaudeAudit combines all three analyzers', () => {
+  const fs = {
+    readdirSync: () => [],
+    statSync: () => ({ isDirectory: () => false }),
+    readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  const findings = analyzeClaudeAudit({ plugins: { list: [] }, configFiles: {} }, { cwd: '/proj', fs });
   assert.deepEqual(findings, []);
 });

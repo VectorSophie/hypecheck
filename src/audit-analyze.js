@@ -127,3 +127,64 @@ export function detectStaleGlobalContext({ cwd, configFiles }) {
     evidence: `Your global Claude settings reference "${referencedRepo}", but you're running from "${projectName}". A stale project-specific instructions block in global config can silently apply to the wrong repo.`,
   }];
 }
+
+// "projected"/"estimated" and "token(s)" can appear in either order around
+// the number (e.g. "projected tokens: 5,000" vs. "projected 5,000 tokens"),
+// so require both keywords to be present anywhere in the text, then pull
+// the first number out of the whole string — a single directional regex
+// tying the number to one specific side would miss one of the orderings.
+const PROJECTION_KEYWORD = /projected|estimated/i;
+const TOKEN_KEYWORD = /tokens?/i;
+const LARGE_TOKEN_THRESHOLD = 2000;
+
+// Surfaces plugin/MCP inventory findings from the collector's output.
+// Effort/model settings are reported as budget CONTEXT, never as a
+// vulnerability — a high-effort default is an economic choice, not a
+// security finding.
+export function analyzeClaudeInventory(collected) {
+  const findings = [];
+
+  for (const plugin of collected?.plugins?.list ?? []) {
+    const detailsText = typeof plugin.details === 'string' ? plugin.details : '';
+    const hasProjection = PROJECTION_KEYWORD.test(detailsText) && TOKEN_KEYWORD.test(detailsText);
+    const numberMatch = hasProjection ? detailsText.match(/\d[\d,]*/) : null;
+    if (numberMatch) {
+      const tokens = Number(numberMatch[0].replace(/,/g, ''));
+      if (Number.isFinite(tokens) && tokens >= LARGE_TOKEN_THRESHOLD) {
+        findings.push({
+          id: 'plugin-high-token-cost',
+          severity: 'low',
+          category: 'workflow',
+          title: 'Plugin has a large projected always-on token cost',
+          evidence: `${plugin.name} projects ~${tokens.toLocaleString()} tokens always-on, per \`claude plugin details\`. Consider whether you need it enabled globally.`,
+        });
+      }
+    }
+  }
+
+  const globalSettings = collected?.configFiles?.globalSettings;
+  const effort = globalSettings?.effort ?? globalSettings?.defaultEffort;
+  if (effort) {
+    findings.push({
+      id: 'effort-budget-context',
+      severity: 'low',
+      category: 'workflow',
+      title: 'Global effort/model setting (budget context, not a finding)',
+      evidence: `Global effort is set to "${effort}". This is informational — a higher effort level is an economic tradeoff, not a vulnerability.`,
+    });
+  }
+
+  return findings;
+}
+
+// Combines all three local-audit analyzers into one findings list. This is
+// what bin/hypecheck.js's cmdAudit calls (Task 10) — it does NOT include
+// src/audit.js's separate scanLocalContext/auditSetup findings, which stay
+// on their own independent (unchanged, synchronous, file-based) path.
+export function analyzeClaudeAudit(collected, { cwd, fs } = {}) {
+  return [
+    ...detectInstructionBombs({ cwd, fs }),
+    ...detectStaleGlobalContext({ cwd, configFiles: collected?.configFiles }),
+    ...analyzeClaudeInventory(collected),
+  ];
+}
