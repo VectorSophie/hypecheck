@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readSnapshot, writeSnapshot } from '../src/audit-snapshot.js';
+import { readSnapshot, writeSnapshot, diffSnapshots } from '../src/audit-snapshot.js';
 
 test('writeSnapshot then readSnapshot round-trips the data', () => {
   const files = new Map();
@@ -40,4 +40,29 @@ test('rejects a non-string snapshot name rather than stringifying it into a path
   const fsImpl = { mkdirSync: () => {}, writeFileSync: () => { throw new Error('should not be called'); } };
   assert.equal(writeSnapshot(undefined, {}, { snapshotDir: '/snap', fsImpl }), false);
   assert.equal(readSnapshot(undefined, { snapshotDir: '/snap', fsImpl }), null);
+});
+
+test('diffSnapshots reports added and removed plugins', () => {
+  const before = { plugins: { list: [{ name: 'a' }] }, claudeCli: { version: '1.0.0' } };
+  const after = { plugins: { list: [{ name: 'a' }, { name: 'b' }] }, claudeCli: { version: '1.0.0' } };
+  const diff = diffSnapshots(before, after);
+  assert.deepEqual(diff.addedPlugins, ['b']);
+  assert.deepEqual(diff.removedPlugins, []);
+});
+
+test('diffSnapshots reports added and removed MCP servers', () => {
+  const before = { configFiles: { projectMcp: { mcpServers: { db: {} } } } };
+  const after = { configFiles: { projectMcp: { mcpServers: { cache: {} } } } };
+  const diff = diffSnapshots(before, after);
+  assert.deepEqual(diff.addedMcp, ['cache']);
+  assert.deepEqual(diff.removedMcp, ['db']);
+});
+
+test('diffSnapshots reports a claude CLI version change', () => {
+  const diff = diffSnapshots({ claudeCli: { version: '1.0.0' } }, { claudeCli: { version: '1.1.0' } });
+  assert.equal(diff.claudeVersionChanged, true);
+});
+
+test('diffSnapshots reports not comparable when either snapshot is missing', () => {
+  assert.deepEqual(diffSnapshots(null, {}), { comparable: false });
 });

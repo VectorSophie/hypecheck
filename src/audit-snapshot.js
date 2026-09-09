@@ -41,3 +41,33 @@ export function writeSnapshot(name, data, { snapshotDir = defaultDir(), fsImpl =
     return false;
   }
 }
+
+// Compares two collectClaudeAudit() snapshots, reporting what changed.
+export function diffSnapshots(before, after) {
+  if (!before || !after) return { comparable: false };
+
+  const pluginNames = (snap) => (snap.plugins?.list ?? []).map((p) => p.name);
+  const beforePlugins = new Set(pluginNames(before));
+  const afterPlugins = new Set(pluginNames(after));
+
+  const addedPlugins = [...afterPlugins].filter((n) => !beforePlugins.has(n));
+  const removedPlugins = [...beforePlugins].filter((n) => !afterPlugins.has(n));
+
+  const mcpNames = (snap) => Object.keys({
+    ...(snap.configFiles?.projectMcp?.mcpServers ?? {}),
+    ...(snap.configFiles?.globalClaudeJson?.mcpServers ?? {}),
+  });
+  const beforeMcp = new Set(mcpNames(before));
+  const afterMcp = new Set(mcpNames(after));
+  const addedMcp = [...afterMcp].filter((n) => !beforeMcp.has(n));
+  const removedMcp = [...beforeMcp].filter((n) => !afterMcp.has(n));
+
+  return {
+    comparable: true,
+    addedPlugins,
+    removedPlugins,
+    addedMcp,
+    removedMcp,
+    claudeVersionChanged: before.claudeCli?.version !== after.claudeCli?.version,
+  };
+}
