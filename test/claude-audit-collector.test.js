@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectClaudeAudit } from '../src/claude-audit-collector.js';
+import { getClaudeVersion } from '../src/claude-cli.js';
 
 test('collectClaudeAudit degrades to unavailable plugins when claude CLI is absent', async () => {
   const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
@@ -103,4 +104,35 @@ test('collectClaudeAudit fetches plugin details concurrently, not one at a time'
   };
   await collectClaudeAudit({ execImpl, now: new Date('2026-01-01') });
   assert.ok(maxInFlight > 1, `expected concurrent plugin-detail lookups, saw max ${maxInFlight} in flight`);
+});
+
+test('end-to-end: a PAT-shaped MCP env value never appears in the collected audit output', async () => {
+  const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: (p) => {
+      if (p === '/proj/.mcp.json') return JSON.stringify({ mcpServers: { gh: { command: 'npx', env: { GITHUB_TOKEN: 'ghp_realLookingTokenValue1234567890' } } } });
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+  };
+  const collected = await collectClaudeAudit({ cwd: '/proj', fs, execImpl, now: new Date('2026-01-01') });
+  const json = JSON.stringify(collected);
+  assert.doesNotMatch(json, /ghp_realLookingTokenValue1234567890/);
+});
+
+test('end-to-end: a bearer token in a raw subprocess error message never leaks', async () => {
+  const execImpl = async () => { throw new Error('Request failed: Authorization: Bearer sk-realLookingSecretValue1234567890'); };
+  const result = await getClaudeVersion({ execImpl });
+  assert.doesNotMatch(JSON.stringify(result), /sk-realLookingSecretValue1234567890/);
+});
+
+test('end-to-end: a private-key-shaped multi-line value under a credential key is fully redacted', async () => {
+  const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: (p) => {
+      if (p === '/home/.claude/settings.json') return JSON.stringify({ deployKey: '-----BEGIN PRIVATE KEY-----\nMIIExampleNotARealKey\n-----END PRIVATE KEY-----' });
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+  };
+  const collected = await collectClaudeAudit({ home: '/home', fs, execImpl, now: new Date('2026-01-01') });
+  assert.equal(collected.configFiles.globalSettings.deployKey, '[REDACTED]');
 });
