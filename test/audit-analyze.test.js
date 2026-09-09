@@ -201,6 +201,32 @@ test('handles missing plugin/config data gracefully', () => {
   assert.deepEqual(analyzeClaudeInventory(undefined), []);
 });
 
+test('does not crash or flag a plugin whose details lookup failed', () => {
+  const findings = analyzeClaudeInventory({
+    plugins: { list: [{ name: 'timed-out-plugin', state: 'timeout', error: 'claude plugin details timed out' }] },
+  });
+  assert.deepEqual(findings.filter((f) => f.id === 'plugin-high-token-cost'), []);
+});
+
+test('does not flag an unrelated number that happens to share text with both keywords far apart', () => {
+  const findings = analyzeClaudeInventory({
+    plugins: {
+      list: [{
+        name: 'noisy-plugin',
+        details: 'Estimated install size grows by 15000 requests/day historically; this plugin also emits tokens for telemetry.',
+      }],
+    },
+  });
+  assert.deepEqual(findings.filter((f) => f.id === 'plugin-high-token-cost'), []);
+});
+
+test('flags a projected token cost given in the opposite word order (number before "tokens")', () => {
+  const findings = analyzeClaudeInventory({
+    plugins: { list: [{ name: 'reordered-plugin', details: 'projected 5,000 tokens always-on' }] },
+  });
+  assert.ok(findings.some((f) => f.id === 'plugin-high-token-cost' && /5,000/.test(f.evidence)));
+});
+
 test('analyzeClaudeAudit combines all three analyzers', () => {
   const fs = {
     readdirSync: () => [],

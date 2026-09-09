@@ -130,12 +130,32 @@ export function detectStaleGlobalContext({ cwd, configFiles }) {
 
 // "projected"/"estimated" and "token(s)" can appear in either order around
 // the number (e.g. "projected tokens: 5,000" vs. "projected 5,000 tokens"),
-// so require both keywords to be present anywhere in the text, then pull
-// the first number out of the whole string — a single directional regex
-// tying the number to one specific side would miss one of the orderings.
+// so this can't be one directional regex binding the number to one specific
+// side. Instead require both keywords to appear within a small window of
+// each other, then pull the number only from that window — not from
+// anywhere in the whole `details` string, which would risk matching an
+// unrelated number (e.g. a "15000 requests/day" figure) that happens to
+// share the text with both keywords used elsewhere for something else.
 const PROJECTION_KEYWORD = /projected|estimated/i;
 const TOKEN_KEYWORD = /tokens?/i;
+const KEYWORD_PROXIMITY_WINDOW = 20;
 const LARGE_TOKEN_THRESHOLD = 2000;
+
+function extractProjectedTokenCount(text) {
+  const projMatch = PROJECTION_KEYWORD.exec(text);
+  const tokenMatch = TOKEN_KEYWORD.exec(text);
+  if (!projMatch || !tokenMatch) return null;
+
+  const projEnd = projMatch.index + projMatch[0].length;
+  const tokenEnd = tokenMatch.index + tokenMatch[0].length;
+  const gap = tokenMatch.index >= projEnd ? tokenMatch.index - projEnd : projMatch.index - tokenEnd;
+  if (gap > KEYWORD_PROXIMITY_WINDOW) return null;
+
+  const windowStart = Math.max(0, Math.min(projMatch.index, tokenMatch.index) - KEYWORD_PROXIMITY_WINDOW);
+  const windowEnd = Math.min(text.length, Math.max(projEnd, tokenEnd) + KEYWORD_PROXIMITY_WINDOW);
+  const numberMatch = text.slice(windowStart, windowEnd).match(/\d[\d,]*/);
+  return numberMatch ? numberMatch[0] : null;
+}
 
 // Surfaces plugin/MCP inventory findings from the collector's output.
 // Effort/model settings are reported as budget CONTEXT, never as a
@@ -146,10 +166,9 @@ export function analyzeClaudeInventory(collected) {
 
   for (const plugin of collected?.plugins?.list ?? []) {
     const detailsText = typeof plugin.details === 'string' ? plugin.details : '';
-    const hasProjection = PROJECTION_KEYWORD.test(detailsText) && TOKEN_KEYWORD.test(detailsText);
-    const numberMatch = hasProjection ? detailsText.match(/\d[\d,]*/) : null;
-    if (numberMatch) {
-      const tokens = Number(numberMatch[0].replace(/,/g, ''));
+    const numberText = extractProjectedTokenCount(detailsText);
+    if (numberText) {
+      const tokens = Number(numberText.replace(/,/g, ''));
       if (Number.isFinite(tokens) && tokens >= LARGE_TOKEN_THRESHOLD) {
         findings.push({
           id: 'plugin-high-token-cost',
