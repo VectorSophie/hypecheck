@@ -669,6 +669,42 @@ test('fetchHookScripts stops after maxScripts across all hooks in a component', 
   assert.equal(calls, 20);
 });
 
+test('fetchHookScripts caps actual fetch attempts at maxScripts, even when most are rejected for exceeding the byte budget', async () => {
+  let calls = 0;
+  const bigScript = 'x'.repeat(60_000); // each one alone fits maxBytes, but a few together exceed it
+  const fetchImpl = async () => { calls += 1; return jsonResponse({ content: Buffer.from(bigScript).toString('base64') }); };
+
+  const hooks = Array.from({ length: 50 }, (_, i) => ({ hooks: [{ command: `node hooks/h${i}.js` }] }));
+  const components = [{
+    path: '',
+    manifests: { plugin: null, hooks: { hooks: { PreToolUse: hooks } }, mcp: null },
+  }];
+
+  await fetchHookScripts(fetchImpl, 'https://api.github.com/repos/o/r', {}, components);
+
+  assert.equal(calls, 20, 'fetch attempts must be capped at maxScripts regardless of how many are rejected for exceeding maxBytes');
+});
+
+test('fetchHookScripts recognizes an already-fetched empty-content script as already handled', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; return jsonResponse({ content: Buffer.from('').toString('base64') }); };
+
+  const components = [{
+    path: '',
+    manifests: { plugin: null, hooks: { hooks: {
+      PreToolUse: [
+        { hooks: [{ command: 'node hooks/shared.js' }] },
+        { hooks: [{ command: 'node hooks/shared.js' }] },
+      ],
+    } }, mcp: null },
+  }];
+
+  await fetchHookScripts(fetchImpl, 'https://api.github.com/repos/o/r', {}, components);
+
+  assert.equal(calls, 1, 'the second hook referencing the same (empty-content) script must not trigger a second fetch');
+  assert.equal(components[0].hookScripts['hooks/shared.js'], '');
+});
+
 test('discoverComponents attaches hookScripts to each component', async () => {
   const fetchImpl = async (url) => {
     if (url.endsWith('git/trees/main?recursive=1')) {

@@ -190,14 +190,16 @@ export async function fetchHookScripts(fetchImpl, repoUrl, headers, components) 
     component.hookScripts = {};
     const hookEvents = extractHookEvents(component.manifests);
 
-    let scriptsUsed = 0;
+    let attempts = 0;
     let bytesUsed = 0;
 
     for (const { command } of hookEvents) {
-      if (scriptsUsed >= HOOK_SCRIPT_BOUNDS.maxScripts) break;
+      if (attempts >= HOOK_SCRIPT_BOUNDS.maxScripts) break;
 
       const scriptPath = resolveLocalScriptPath(command, component.path);
-      if (!scriptPath || component.hookScripts[scriptPath] || !isPathSafe(scriptPath)) continue;
+      if (!scriptPath || Object.hasOwn(component.hookScripts, scriptPath) || !isPathSafe(scriptPath)) continue;
+
+      attempts += 1;
 
       try {
         const response = await fetchImpl(`${repoUrl}/contents/${scriptPath}`, headers ? { headers } : undefined);
@@ -208,7 +210,6 @@ export async function fetchHookScripts(fetchImpl, repoUrl, headers, components) 
         if (bytesUsed + text.length > HOOK_SCRIPT_BOUNDS.maxBytes) continue;
 
         component.hookScripts[scriptPath] = text;
-        scriptsUsed += 1;
         bytesUsed += text.length;
       } catch {
         continue;
