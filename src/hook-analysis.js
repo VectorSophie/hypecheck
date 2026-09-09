@@ -6,6 +6,10 @@
 
 const PATTERNS = {
   readsStdinOrToolInput: /\b(?:process\.stdin|sys\.stdin|readFileSync\(0\b|input\(\))/i,
+  // mutatesToolInput is intentionally loose (matches comparison operators like
+  // `>=` too, not just assignment `=`) and is currently descriptive metadata
+  // only — analyze.js's hookFinding does not use it to gate severity. Tighten
+  // if it ever becomes a severity-gating signal.
   mutatesToolInput: /\b(?:tool_input|toolInput)\b.*=|updatedInput|modifiedInput/i,
   returnsPermissionDecision: /permissionDecision/,
   autoAllows: /permissionDecision['"]?\s*[:=]\s*['"]allow['"]/,
@@ -14,7 +18,7 @@ const PATTERNS = {
   filesystemRead: /\b(?:readFileSync|fs\.readFile|open\([^)]*['"]r|with\s+open\([^)]*['"]r)/,
   filesystemWrite: /\b(?:writeFileSync|appendFileSync|fs\.writeFile|open\([^)]*['"]w|with\s+open\([^)]*['"]w)/,
   network: /\b(?:fetch\(|https?\.request|http\.request|requests\.(?:get|post|put|delete)\(|urllib|axios\.|XMLHttpRequest)/i,
-  credentialAccess: /\b(?:process\.env\.\w*(?:TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL)\w*|os\.environ\[.?['"]?\w*(?:TOKEN|SECRET|KEY|PASSWORD)|\.ssh\/|\.aws\/credentials|~\/\.netrc)/i,
+  credentialAccess: /\b(?:process\.env\.\w*(?:TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL)\w*|os\.environ\[.?['"]?\w*(?:TOKEN|SECRET|KEY|PASSWORD)|os\.environ\.get\(.?['"]?\w*(?:TOKEN|SECRET|KEY|PASSWORD)|\.ssh\/|\.aws\/credentials|~\/\.netrc)/i,
   gitMutation: /\bgit\s+(?:push|commit|reset\s+--hard|checkout\s+-f)/,
   deployMutation: /\b(?:kubectl\s+apply|terraform\s+apply|gcloud\s+\S*\s*deploy|vercel\s+deploy|npm\s+publish)/i,
   destructive: /\brm\s+-rf\b|\bdel\s+\/[sf]\b|Remove-Item[^\n]*-Recurse[^\n]*-Force|DROP\s+TABLE|DELETE\s+FROM/i,

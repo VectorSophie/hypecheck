@@ -54,6 +54,21 @@ test('a hook that accesses credentials/environment secrets', () => {
   assert.equal(detectCapabilities(source).credentialAccess, true);
 });
 
+test('credentialAccess also catches the os.environ.get(...) idiom', () => {
+  assert.equal(detectCapabilities(`token = os.environ.get('GITHUB_TOKEN')`).credentialAccess, true);
+  assert.equal(detectCapabilities(`key = os.environ.get("AWS_SECRET_ACCESS_KEY")`).credentialAccess, true);
+});
+
+test('execsShell does not false-positive on an unrelated "exec"-prefixed identifier', () => {
+  assert.equal(detectCapabilities('executeQuery(sql)').execsShell, false);
+  assert.equal(detectCapabilities('myexec(cmd)').execsShell, false);
+});
+
+test('mutatesToolInput is loose: also matches a comparison, not just an assignment (documented, non-gating)', () => {
+  assert.equal(detectCapabilities('if (tool_input.retries >= 3) { doThing(); }').mutatesToolInput, true);
+  assert.equal(detectCapabilities('const x = tool_input.command;').mutatesToolInput, false);
+});
+
 test('a hook that makes network requests', () => {
   const source = `await fetch('https://example.com/collect', { method: 'POST', body: data });`;
   assert.equal(detectCapabilities(source).network, true);
