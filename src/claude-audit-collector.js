@@ -1,6 +1,29 @@
 import { getClaudeVersion, listPlugins, getPluginDetails, readClaudeConfigFiles } from './claude-cli.js';
 import { redact } from './redact.js';
 
+// Plugin-detail lookups are independent, so running them fully concurrent
+// (unbounded Promise.all) seemed like the obvious win over N sequential 5s
+// timeouts. In practice it backfires: each lookup spawns a real `claude`
+// child process, and N of those contending for CPU/IO at once measurably
+// slows every individual call down — empirically, 10 concurrent lookups
+// that each take ~3s standalone turned into 9-10 timeouts. Capping
+// concurrency keeps the parallelism win (still far better than fully
+// sequential) without starving every call at once.
+const PLUGIN_DETAIL_CONCURRENCY = 4;
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 // Orchestrates everything Phase 4 knows how to collect about the user's
 // local Claude Code setup into one structured, state-tagged, ALREADY-REDACTED
 // result. Every field is tagged with what state it's actually in — this file
@@ -14,11 +37,10 @@ export async function collectClaudeAudit({ cwd, home, fs, execImpl, now = new Da
     const listed = await listPlugins({ execImpl });
     if (listed.state === 'connected') {
       const names = extractPluginNames(listed.plugins);
-      // Independent lookups, each with its own 5s default timeout — run
-      // concurrently so N plugins cost ~1 timeout worst-case, not N.
-      const details = await Promise.all(
-        names.map(async (name) => ({ name, ...(await getPluginDetails(name, { execImpl })) })),
-      );
+      const details = await mapWithConcurrency(names, PLUGIN_DETAIL_CONCURRENCY, async (name) => ({
+        name,
+        ...(await getPluginDetails(name, { execImpl })),
+      }));
       plugins = { state: 'connected', list: details };
     } else {
       // Every non-connected state gets a consistent shape: downstream

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import { auditSetup } from '../src/audit.js';
 
 const tag = (...t) => new Set(t);
@@ -123,4 +125,47 @@ test('audit --snapshot warns on stderr when the snapshot name is rejected', asyn
   };
   await runCli(['audit', '--snapshot', '../escape'], { stdout: () => {}, stderr: (t) => errOut.push(t), scanCwd: '/proj', scanHome: '/home', fsImpl: fs, execImpl });
   assert.match(errOut.join(''), /could not save snapshot/);
+});
+
+test('audit --no-scan skips the claude-cli collector entirely, not just local-tools scanning', async () => {
+  const { runCli } = await import('../bin/hypecheck.js');
+  let execCalled = false;
+  let fsRead = false;
+  const execImpl = async () => { execCalled = true; const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: () => { fsRead = true; throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    readdirSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    statSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  const code = await runCli(['audit', '--no-scan'], { stdout: () => {}, stderr: () => {}, scanCwd: '/proj', scanHome: '/home', fsImpl: fs, execImpl });
+  assert.equal(execCalled, false, '--no-scan must not spawn the claude subprocess');
+  assert.equal(fsRead, false, '--no-scan must not read local/global config files');
+  assert.equal(typeof code, 'number');
+});
+
+test('audit --snapshot X --diff X in one invocation compares against the PRIOR contents of X, not the one just written', async () => {
+  const { runCli } = await import('../bin/hypecheck.js');
+  const files = new Map();
+  // audit-snapshot.js's default snapshot dir is always the REAL os.homedir()
+  // (not the test's fake scanHome) since it's not threaded through fsImpl's
+  // scanHome option — mirror that here rather than hardcoding a fake path.
+  const snapshotPath = path.join(os.homedir(), '.hypecheck', 'audits', 'same.json');
+  // Seed an existing snapshot with a different plugin set than what this run collects.
+  files.set(snapshotPath, JSON.stringify({ plugins: { list: [{ name: 'old-plugin' }] }, claudeCli: {} }));
+  const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: (p) => { if (files.has(p)) return files.get(p); throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    readdirSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    statSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    mkdirSync: () => {},
+    writeFileSync: (p, data) => files.set(p, data),
+  };
+  const out = [];
+  await runCli(['audit', '--snapshot', 'same', '--diff', 'same'], {
+    stdout: (t) => out.push(t), stderr: () => {}, scanCwd: '/proj', scanHome: '/home', fsImpl: fs, execImpl,
+  });
+  // This run's own collected plugins list is empty (claude unavailable), so diffing
+  // against the seeded "old-plugin" snapshot must report it removed -- proving the
+  // diff read happened before the write overwrote the seeded file.
+  assert.match(out.join(''), /Removed plugins: old-plugin/);
 });

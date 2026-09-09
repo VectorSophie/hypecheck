@@ -106,6 +106,24 @@ test('collectClaudeAudit fetches plugin details concurrently, not one at a time'
   assert.ok(maxInFlight > 1, `expected concurrent plugin-detail lookups, saw max ${maxInFlight} in flight`);
 });
 
+test('collectClaudeAudit caps plugin-detail concurrency instead of running all lookups at once', async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const pluginIds = Array.from({ length: 10 }, (_, i) => ({ id: `plugin-${i}` }));
+  const execImpl = async (cmd, args) => {
+    if (args[0] === '--version') return { stdout: '1.0.0' };
+    if (args.join(' ') === 'plugin list --json') return { stdout: JSON.stringify({ plugins: pluginIds }) };
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+    return { stdout: 'ok' };
+  };
+  const result = await collectClaudeAudit({ execImpl, now: new Date('2026-01-01') });
+  assert.equal(result.plugins.list.length, 10);
+  assert.ok(maxInFlight <= 4, `expected concurrency capped at 4, saw max ${maxInFlight} in flight`);
+});
+
 test('end-to-end: a PAT-shaped MCP env value never appears in the collected audit output', async () => {
   const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
   const fs = {

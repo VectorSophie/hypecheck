@@ -51,8 +51,9 @@ function resolveScan(args, options) {
     home: options.scanHome ?? os.homedir(),
     fs: options.fsImpl ?? fs,
   };
-  if (removeFlag(args, '--no-scan')) return { localTools: undefined, userProfile: undefined, ...scan };
-  return { localTools: scanLocalContext(scan), userProfile: profileUser(scan), ...scan };
+  const noScan = removeFlag(args, '--no-scan');
+  if (noScan) return { localTools: undefined, userProfile: undefined, noScan, ...scan };
+  return { localTools: scanLocalContext(scan), userProfile: profileUser(scan), noScan, ...scan };
 }
 
 async function cmdEval(args, options, stdout, stderr) {
@@ -107,27 +108,38 @@ async function cmdAudit(args, options, stdout, stderr) {
   // consumed here would leave the collector reading process.cwd() while the
   // local-tools scan read the --scan path, silently describing two different
   // projects in the same report.
-  const { localTools, cwd: scanCwd, home: scanHome, fs: scanFs } = resolveScan(args, options);
+  const { localTools, noScan, cwd: scanCwd, home: scanHome, fs: scanFs } = resolveScan(args, options);
   const localFindings = auditSetup(localTools ?? []);
 
-  const collected = await collectClaudeAudit({
-    cwd: scanCwd,
-    home: scanHome,
-    fs: scanFs,
-    execImpl: options.execImpl,
-    now: options.now,
-  });
-  const cliFindings = analyzeClaudeAudit(collected, { cwd: scanCwd, fs: scanFs });
-
-  if (snapshotName) {
-    const saved = writeSnapshot(snapshotName, collected, { fsImpl: scanFs });
-    if (!saved) stderr(`Warning: could not save snapshot "${snapshotName}" (invalid name or write failure).\n`);
+  // --no-scan disables BOTH data sources for audit, matching its documented
+  // "skip scanning local Claude Code / dev config" meaning — not just the
+  // local-tools scan, which would otherwise leave the claude-cli collector
+  // still spawning a real subprocess and reading disk regardless of the flag.
+  let collected = { claudeCli: { state: 'unavailable' }, plugins: { state: 'unavailable', list: [] }, configFiles: {} };
+  let cliFindings = [];
+  if (!noScan) {
+    collected = await collectClaudeAudit({
+      cwd: scanCwd,
+      home: scanHome,
+      fs: scanFs,
+      execImpl: options.execImpl,
+      now: options.now,
+    });
+    cliFindings = analyzeClaudeAudit(collected, { cwd: scanCwd, fs: scanFs });
   }
 
+  // Compute the diff BEFORE writing a same-named snapshot, so
+  // `--snapshot X --diff X` in one invocation compares against the prior
+  // contents of X rather than the one just written in this same call.
   let diffResult = null;
   if (diffName) {
     const prior = readSnapshot(diffName, { fsImpl: scanFs });
     diffResult = diffSnapshots(prior, collected);
+  }
+
+  if (snapshotName) {
+    const saved = writeSnapshot(snapshotName, collected, { fsImpl: scanFs });
+    if (!saved) stderr(`Warning: could not save snapshot "${snapshotName}" (invalid name or write failure).\n`);
   }
 
   const findings = [...localFindings, ...cliFindings];
@@ -170,6 +182,8 @@ function usage() {
 
   --json        emit the structured report instead of Markdown
   --no-scan     skip scanning local Claude Code / dev config for redundancy
+                (for audit: also skips the claude-cli collector entirely —
+                no subprocess spawned, no config file read)
   --scan <path> scan this project directory instead of the current one
   --track       cache this eval and report drift on the next --track run
   --snapshot <name>  save this audit as a named snapshot (~/.hypecheck/audits/<name>.json)

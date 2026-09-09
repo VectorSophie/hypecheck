@@ -103,6 +103,22 @@ export const FINDING_DOCS = {
     why: 'the candidate changed its executable surface since you last vetted it — the rug-pull / post-audit-swap attack class.',
     verify: 're-read the changed hook/MCP config and diff it against what you approved before.',
   },
+  'nested-claude-md-hazard': {
+    why: 'a CLAUDE.md sits under a fixtures/tests/malicious-style directory in your own project. Claude Code loads nested CLAUDE.md files on demand — if this one is intentionally adversarial (e.g. security-research test fixtures), it can become live agent instructions the moment something touches that path.',
+    verify: 'open the named file and confirm whether its content is a deliberate test fixture; if so, gitignore it, rename it, or generate it only into a temporary directory.',
+  },
+  'stale-global-context': {
+    why: 'your global (~/.claude) settings embed a repo name/path that does not match the project you are currently running from — a stale project-specific instructions block in global config can silently apply to the wrong repo.',
+    verify: 'open your global Claude settings and check for a hardcoded repo reference; remove or scope it to the project it actually belongs to.',
+  },
+  'plugin-high-token-cost': {
+    why: 'an installed plugin projects a large always-on token cost per `claude plugin details` — informational, not a security concern, but worth knowing if it is enabled globally rather than per-project.',
+    verify: 'run `claude plugin details <name>` yourself and decide whether you need the plugin enabled everywhere.',
+  },
+  'effort-budget-context': {
+    why: 'purely informational: your global effort/model setting is reported here as budget context, never as a vulnerability — a higher effort level is an economic tradeoff.',
+    verify: 'no action needed unless you want to change your global effort/model default.',
+  },
 };
 
 export function explainFinding(id) {

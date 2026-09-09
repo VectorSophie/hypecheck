@@ -38,3 +38,11 @@ test('retired finding ids (configured-hook, shell-in-hook) no longer resolve —
   assert.equal(explainFinding('configured-hook'), null);
   assert.equal(explainFinding('shell-in-hook'), null);
 });
+
+test('explain works for all four Phase 4 local-audit finding ids', () => {
+  for (const id of ['nested-claude-md-hazard', 'stale-global-context', 'plugin-high-token-cost', 'effort-budget-context']) {
+    const text = explainFinding(id);
+    assert.ok(text, `expected an explanation for ${id}`);
+    assert.match(text, new RegExp(id));
+  }
+});
