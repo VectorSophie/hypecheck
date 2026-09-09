@@ -114,3 +114,25 @@ test('roast summary still works with no findings', () => {
   assert.equal(typeof scored.summary, 'string');
   assert.ok(scored.summary.length > 0);
 });
+
+test('tokenEconomics and labels pass through scoreAnalysis unchanged and do not affect the verdict', () => {
+  const scored = scoreAnalysis(base([], {
+    tokenEconomics: { evidenceTier: 'benchmarked', claim: null, mechanisms: { fromSource: ['caching'], fromReadme: [] }, benchmark: { present: true, paths: ['bench/x.json'] }, labels: ['TOKEN_WIN'] },
+    labels: ['TOKEN_WIN'],
+  }));
+  assert.equal(scored.tokenEconomics.evidenceTier, 'benchmarked');
+  assert.deepEqual(scored.labels, ['TOKEN_WIN']);
+  assert.equal(scored.verdict, 'INSTALL');
+});
+
+test('a TOKEN_WIN label alone cannot override a DANGEROUS verdict driven by real security findings', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'hook-dangerous-capability', category: 'security', severity: 'high', title: 't', evidence: 'x' },
+    { id: 'hook-permission-bypass', category: 'security', severity: 'high', title: 't', evidence: 'x' },
+  ], {
+    tokenEconomics: { evidenceTier: 'benchmarked', claim: null, mechanisms: { fromSource: [], fromReadme: [] }, benchmark: { present: true, paths: [] }, labels: ['TOKEN_WIN'] },
+    labels: ['TOKEN_WIN'],
+    hasUniqueCapability: true,
+  }));
+  assert.equal(scored.verdict, 'DANGEROUS');
+});
