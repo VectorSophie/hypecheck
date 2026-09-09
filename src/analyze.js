@@ -199,6 +199,10 @@ const HIGH_RISK_HOOK_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUse
 // bucket regardless of what it actually does.
 function hookFinding(capability) {
   const { event, command } = capability;
+  // filesystemWrite/filesystemRead are deliberately excluded here: writing a
+  // log/cache file is extremely common and not inherently dangerous, and the
+  // static regexes can't distinguish a fixed path from an attacker-influenced
+  // one. Tracked as data on the capability struct, not severity-gating.
   const dangerousCapability = capability.execsShell || capability.network || capability.credentialAccess
     || capability.destructive || capability.pipesDownloadToShell || capability.gitMutation || capability.deployMutation;
 
