@@ -1,11 +1,9 @@
 import { extractPackageSignals, extractHookEvents, extractMcpServers } from './extractors.js';
 import { tagCapabilities, matchStrength } from './capabilities.js';
 import { tagTech } from './profile.js';
+import { classifyHook } from './hook-analysis.js';
 
 const SHELL_DEPS = new Set(['execa', 'shelljs', 'zx', 'cross-spawn', 'child_process']);
-// Hook events that run on tool calls / prompts execute with full user permissions.
-const HIGH_RISK_HOOK_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit']);
-const SHELL_PIPE = /\|\s*(?:sh|bash|zsh)\b|curl\s+[^|]*\|\s*\w+|base64\s+-d/i;
 
 export function analyzeCandidate(data, options = {}) {
   const now = options.now ?? new Date();
@@ -22,7 +20,7 @@ export function analyzeCandidate(data, options = {}) {
 
   const hookEvents = extractHookEvents(data.manifests);
   const mcpServers = extractMcpServers(data.manifests);
-  analyzeManifests(hookEvents, mcpServers, findings);
+  analyzeManifests(hookEvents, mcpServers, data.componentRoot, data.hookScripts, findings);
   analyzeText(data.readme ?? data.html ?? '', findings, { manifestHooksFound: hookEvents.length > 0 });
 
   const localTools = options.localTools;
@@ -170,24 +168,10 @@ function analyzePackageSignals(data, findings) {
 
 // Findings from a repo's actual committed config. Precise > regex: these drive
 // the verdict, and demote the README heuristics below to corroboration.
-function analyzeManifests(hookEvents, mcpServers, findings) {
-  for (const { event, command } of hookEvents) {
-    findings.push({
-      id: 'configured-hook',
-      severity: HIGH_RISK_HOOK_EVENTS.has(event) ? 'high' : 'medium',
-      category: 'security',
-      title: 'Configured Claude Code hook',
-      evidence: `Configures a ${event} hook${command ? ` running \`${truncate(command)}\`` : ''}, which executes with full user permissions.`,
-    });
-    if (SHELL_PIPE.test(command)) {
-      findings.push({
-        id: 'shell-in-hook',
-        severity: 'high',
-        category: 'security',
-        title: 'Hook pipes to a shell',
-        evidence: `A ${event} hook command pipes to a shell or decodes a payload: \`${truncate(command)}\`.`,
-      });
-    }
+function analyzeManifests(hookEvents, mcpServers, componentRoot, hookScripts, findings) {
+  for (const hookEntry of hookEvents) {
+    const capability = classifyHook(hookEntry, componentRoot ?? '', hookScripts ?? {});
+    findings.push(hookFinding(capability));
   }
 
   if (mcpServers.length > 0) {
@@ -200,6 +184,61 @@ function analyzeManifests(hookEvents, mcpServers, findings) {
       evidence: `Declares ${mcpServers.length} MCP server(s)${withSecrets ? `, ${withSecrets} requiring credentials` : ''}.`,
     });
   }
+}
+
+const HIGH_RISK_HOOK_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit']);
+
+// Translates one hook's capability struct into exactly one finding.
+// Priority: observed dangerous capability > permission bypass > unverified
+// powerful > benign/bounded. A hook can only be "dangerous" or
+// "permission-bypass" (high severity, gates DANGEROUS) via ACTUALLY OBSERVED
+// evidence — either inspected source, or a pattern visible in the command
+// line itself (e.g. curl|sh). An uninspected, otherwise-unremarkable command
+// on a high-risk event is "unverified" (medium), never automatically high —
+// this is the fix for "PreToolUse ⇒ scary" collapsing every hook into one
+// bucket regardless of what it actually does.
+function hookFinding(capability) {
+  const { event, command } = capability;
+  const dangerousCapability = capability.execsShell || capability.network || capability.credentialAccess
+    || capability.destructive || capability.pipesDownloadToShell || capability.gitMutation || capability.deployMutation;
+
+  if (dangerousCapability) {
+    return {
+      id: 'hook-dangerous-capability',
+      severity: 'high',
+      category: 'security',
+      title: 'Hook has an observed dangerous capability',
+      evidence: `A ${event} hook (\`${truncate(command)}\`) ${capability.sourceInspected ? 'was inspected and' : 'shows'} a dangerous capability pattern (shell execution, network access, credential access, destructive command, or a download piped to a shell).`,
+    };
+  }
+
+  if (capability.autoAllows) {
+    return {
+      id: 'hook-permission-bypass',
+      severity: 'high',
+      category: 'security',
+      title: 'Hook auto-allows permission, bypassing the normal prompt',
+      evidence: `A ${event} hook (\`${truncate(command)}\`) returns \`permissionDecision: "allow"\`, bypassing Claude's normal permission flow.`,
+    };
+  }
+
+  if (!capability.sourceInspected && HIGH_RISK_HOOK_EVENTS.has(event)) {
+    return {
+      id: 'hook-unverified-powerful',
+      severity: 'medium',
+      category: 'security',
+      title: 'Unverified hook on a high-impact event',
+      evidence: `A ${event} hook (\`${truncate(command)}\`) runs with full user permissions on every matching tool call; its source could not be inspected, so its actual behavior is unverified.`,
+    };
+  }
+
+  return {
+    id: 'hook-benign-bounded',
+    severity: 'low',
+    category: 'security',
+    title: 'Hook inspected, no dangerous capability found',
+    evidence: `A ${event} hook (\`${truncate(command)}\`)${capability.sourceInspected ? ' was inspected and shows' : ' shows'} no shell execution, network access, credential access, or destructive capability.`,
+  };
 }
 
 // Cross-reference the candidate's configured surface against what the user
