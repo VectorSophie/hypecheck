@@ -3,7 +3,7 @@
 // this file) is the entry point most callers want — the functions above it
 // are its independently-testable building blocks.
 
-const SAVINGS_PATTERN = /(?:saves?|reduces?|cuts?|shrinks?)\b[^.\n%]{0,60}?(\d{1,3})\s*%|(\d{1,3})\s*%\s*(?:reduction|savings?|smaller|fewer|less)\b/i;
+const SAVINGS_PATTERN = /(?:sav(?:es?|ing)|reduc(?:es?|ing)|cut(?:s|ting)?|shrink(?:s|ing)?)\b[^.\n%]{0,60}?(\d{1,3})\s*%|(\d{1,3})\s*%\s*(?:reduction|savings?|smaller|fewer|less)\b/i;
 
 // Extracts a percentage-based savings claim from free text (a README, a
 // package description, etc). Returns { percentage, quote } or null. A
