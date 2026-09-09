@@ -125,6 +125,14 @@ test('end-to-end: a bearer token in a raw subprocess error message never leaks',
   assert.doesNotMatch(JSON.stringify(result), /sk-realLookingSecretValue1234567890/);
 });
 
+test('end-to-end: a PEM private key embedded in a raw subprocess error message is fully redacted, not just its header', async () => {
+  const execImpl = async () => { throw new Error('claude crashed while loading -----BEGIN PRIVATE KEY-----\nMIIExampleLeakedKeyMaterial\n-----END PRIVATE KEY-----'); };
+  const result = await getClaudeVersion({ execImpl });
+  const json = JSON.stringify(result);
+  assert.doesNotMatch(json, /MIIExampleLeakedKeyMaterial/);
+  assert.doesNotMatch(json, /BEGIN PRIVATE KEY/);
+});
+
 test('end-to-end: a private-key-shaped multi-line value under a credential key is fully redacted', async () => {
   const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
   const fs = {

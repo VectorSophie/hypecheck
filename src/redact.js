@@ -8,11 +8,16 @@ const SENSITIVE_KEY = /token|secret|password|passwd|api[_-]?key|authoriz(?:ation
 // Single canonical list of secret-shaped patterns, used by both redact()
 // (whole-value redaction, via the non-global SECRET_SUBSTRING_TEST) and
 // redactText() (in-place substring replacement, needs the `g` flag).
-// The `-----BEGIN...PRIVATE KEY-----` alternative is deliberately outside the
-// \b(...) group above: \b requires a word/non-word transition, and "-" (the
-// first char of a PEM header) is non-word, so a \b-anchored alternative would
-// never match a PEM block sitting at the very start of a string.
-const SECRET_SUBSTRING = /\b(Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})|(-----BEGIN(?: [A-Z]+)* PRIVATE KEY-----)/g;
+// The PEM alternative is deliberately outside the \b(...) group above: \b
+// requires a word/non-word transition, and "-" (the first char of a PEM
+// header) is non-word, so a \b-anchored alternative would never match a PEM
+// block sitting at the very start of a string. It also consumes the WHOLE
+// block (header through matching footer, non-greedy across newlines via
+// [\s\S]*?) rather than just the header line — redactText() does in-place
+// substring replacement, so a header-only match would strip the "BEGIN"
+// line and leave the actual base64 key material and footer sitting in
+// plaintext right next to it.
+const SECRET_SUBSTRING = /\b(?:Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})|-----BEGIN(?: [A-Z]+)* PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z]+)* PRIVATE KEY-----/g;
 // Non-global copy for .test() calls — a global regex's .test() advances
 // lastIndex as a side effect, which would cause intermittent false
 // negatives across redact()'s repeated calls.

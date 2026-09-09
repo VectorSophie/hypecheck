@@ -53,3 +53,23 @@ test('redact() catches secret-shaped strings in plain arrays', () => {
   const result = redact(['Bearer sk-abcdefghijklmnop']);
   assert.equal(result[0], '[REDACTED]');
 });
+
+test('redact() collapses a value containing a PEM private key to fully redacted', () => {
+  const result = redact({ deployKey: '-----BEGIN PRIVATE KEY-----\nMIIExampleKeyMaterial\n-----END PRIVATE KEY-----' });
+  assert.equal(result.deployKey, '[REDACTED]');
+});
+
+test('redactText() strips the ENTIRE PEM block, not just the header line — the key material must not survive', () => {
+  const text = redactText('log dump: -----BEGIN PRIVATE KEY-----\nMIIExampleKeyMaterialBase64Body\n-----END PRIVATE KEY-----\nend of dump');
+  assert.doesNotMatch(text, /MIIExampleKeyMaterialBase64Body/);
+  assert.doesNotMatch(text, /-----BEGIN PRIVATE KEY-----/);
+  assert.doesNotMatch(text, /-----END PRIVATE KEY-----/);
+  assert.match(text, /\[REDACTED\]/);
+});
+
+test('redactText() handles RSA/EC/OPENSSH/ENCRYPTED PRIVATE KEY header variants', () => {
+  for (const kind of ['RSA', 'EC', 'OPENSSH', 'ENCRYPTED']) {
+    const text = redactText(`-----BEGIN ${kind} PRIVATE KEY-----\nbody\n-----END ${kind} PRIVATE KEY-----`);
+    assert.doesNotMatch(text, /body/, `expected ${kind} key body to be redacted`);
+  }
+});
