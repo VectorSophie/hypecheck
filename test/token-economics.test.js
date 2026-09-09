@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractClaimedSavings, detectMechanismKeywords } from '../src/token-economics.js';
+import { extractClaimedSavings, detectMechanismKeywords, detectBenchmarkEvidence } from '../src/token-economics.js';
 
 test('extracts a "saves N%" style claim', () => {
   const result = extractClaimedSavings('This tool saves 98% of your context by routing bulk reads elsewhere.');
@@ -74,4 +74,32 @@ test('returns an empty set for text with no mechanism keywords', () => {
 test('mechanism detection is null-safe', () => {
   assert.equal(detectMechanismKeywords(undefined).size, 0);
   assert.equal(detectMechanismKeywords('').size, 0);
+});
+
+test('detects a benchmark directory in scanned paths', () => {
+  const result = detectBenchmarkEvidence(['bench/baseline.json', 'src/index.js'], []);
+  assert.equal(result.present, true);
+  assert.deepEqual(result.paths, ['bench/baseline.json']);
+});
+
+test('detects a benchmark directory in skipped paths (not every file needs fetching to prove presence)', () => {
+  const result = detectBenchmarkEvidence([], [{ path: 'benchmarks/results.csv', reason: 'not-interesting' }]);
+  assert.equal(result.present, true);
+  assert.deepEqual(result.paths, ['benchmarks/results.csv']);
+});
+
+test('detects an eval directory', () => {
+  const result = detectBenchmarkEvidence(['evals/run.py'], []);
+  assert.equal(result.present, true);
+});
+
+test('does not false-positive on unrelated paths', () => {
+  const result = detectBenchmarkEvidence(['src/index.js', 'docs/README.md'], [{ path: 'test/foo.test.js', reason: 'not-interesting' }]);
+  assert.equal(result.present, false);
+  assert.deepEqual(result.paths, []);
+});
+
+test('handles missing/empty inputs safely', () => {
+  assert.deepEqual(detectBenchmarkEvidence(), { present: false, paths: [] });
+  assert.deepEqual(detectBenchmarkEvidence([], []), { present: false, paths: [] });
 });

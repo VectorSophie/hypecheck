@@ -44,3 +44,17 @@ export function detectMechanismKeywords(text) {
   }
   return mechanisms;
 }
+
+const BENCHMARK_DIR = /(^|\/)(?:bench|benchmarks?|evals?|evaluations?)\//i;
+
+// Structural signal: does a benchmark/eval directory exist in the repo at
+// all? Reuses discovery's already-collected path lists (both the files it
+// actually fetched, `scanned`, and the ones it looked at but skipped as
+// uninteresting, `skipped`) — no new network fetch. Presence-only: this
+// does NOT read benchmark result content, just proves a checked-in
+// benchmark harness exists somewhere in the scanned portion of the repo.
+export function detectBenchmarkEvidence(scanned = [], skipped = []) {
+  const allPaths = [...(scanned ?? []), ...(skipped ?? []).map((s) => s.path)];
+  const paths = allPaths.filter((p) => BENCHMARK_DIR.test(p));
+  return { present: paths.length > 0, paths };
+}
