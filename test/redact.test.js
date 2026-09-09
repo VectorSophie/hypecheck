@@ -41,3 +41,15 @@ test('redactText leaves non-string input untouched', () => {
   assert.equal(redactText(undefined), undefined);
   assert.equal(redactText(42), 42);
 });
+
+test('redact() catches mid-string embedded secrets under innocuous keys', () => {
+  const result = redact({
+    command: "curl -H 'Authorization: Bearer ghp_abcdefghijklmnopqrst12' https://example.com"
+  });
+  assert.equal(result.command, '[REDACTED]');
+});
+
+test('redact() catches secret-shaped strings in plain arrays', () => {
+  const result = redact(['Bearer sk-abcdefghijklmnop']);
+  assert.equal(result[0], '[REDACTED]');
+});

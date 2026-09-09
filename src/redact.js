@@ -4,7 +4,11 @@
 // "we read your Claude Code config" and "we might print your API key."
 
 const SENSITIVE_KEY = /token|secret|password|passwd|api[_-]?key|authoriz(?:ation|ed)|credential|cookie|private[_-]?key/i;
-const SENSITIVE_VALUE_PREFIX = /^(Bearer\s+|sk-|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[baprs]-|AKIA)/i;
+
+// Non-global version for use in .test() calls — avoids lastIndex side effects
+const SECRET_SUBSTRING_TEST = new RegExp(
+  /\b(Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})/.source
+);
 
 export function redact(value, key = '') {
   if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
@@ -17,7 +21,7 @@ export function redact(value, key = '') {
     return out;
   }
 
-  if (typeof value === 'string' && SENSITIVE_VALUE_PREFIX.test(value)) return '[REDACTED]';
+  if (typeof value === 'string' && SECRET_SUBSTRING_TEST.test(value)) return '[REDACTED]';
 
   return value;
 }
