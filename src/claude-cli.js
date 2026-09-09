@@ -27,7 +27,7 @@ async function runClaude(args, options = {}) {
       timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxBuffer: options.maxBuffer ?? DEFAULT_MAX_BUFFER,
     });
-    return { state: 'connected', stdout };
+    return { state: 'connected', stdout: String(stdout ?? '') };
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return { state: 'unavailable', error: 'claude CLI not found in PATH' };
@@ -55,6 +55,10 @@ export async function listPlugins(options = {}) {
   }
 }
 
+// `pluginId` is passed as a bare positional argument — shell:false rules out
+// shell injection, but a value like `--help` would still be read as a flag
+// by the `claude` CLI itself. Safe today because every caller sources
+// pluginId from listPlugins()'s own trusted output, never external input.
 export async function getPluginDetails(pluginId, options = {}) {
   const result = await runClaude(['plugin', 'details', pluginId], options);
   if (result.state !== 'connected') return result;
