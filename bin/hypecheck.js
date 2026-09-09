@@ -33,7 +33,7 @@ export async function runCli(argv, options = {}) {
   if (command === 'eval') return cmdEval(args, options, stdout, stderr);
   if (command === 'compare') return cmdCompare(args, options, stdout, stderr);
   if (command === 'explain') return cmdExplain(args, stdout, stderr);
-  if (command === 'audit') return cmdAudit(args, options, stdout);
+  if (command === 'audit') return cmdAudit(args, options, stdout, stderr);
 
   stderr(`Unknown command: ${command}\n\n${usage()}`);
   return 2;
@@ -41,14 +41,18 @@ export async function runCli(argv, options = {}) {
 
 // Resolves the shared local scan once: tools (redundancy/collision) and the
 // stack profile (fit) both read the same cwd/home/fs. --no-scan disables both.
+// Returns the resolved {cwd, home, fs} too, so every command that also needs
+// to read local state directly (e.g. cmdAudit's claude-cli collector) uses
+// the SAME resolved values rather than recomputing its own defaults and
+// silently diverging if --scan was given.
 function resolveScan(args, options) {
-  if (removeFlag(args, '--no-scan')) return { localTools: undefined, userProfile: undefined };
   const scan = {
     cwd: removeOption(args, '--scan') ?? options.scanCwd ?? process.cwd(),
     home: options.scanHome ?? os.homedir(),
     fs: options.fsImpl ?? fs,
   };
-  return { localTools: scanLocalContext(scan), userProfile: profileUser(scan) };
+  if (removeFlag(args, '--no-scan')) return { localTools: undefined, userProfile: undefined, ...scan };
+  return { localTools: scanLocalContext(scan), userProfile: profileUser(scan), ...scan };
 }
 
 async function cmdEval(args, options, stdout, stderr) {
@@ -95,31 +99,34 @@ async function cmdCompare(args, options, stdout, stderr) {
   }
 }
 
-async function cmdAudit(args, options, stdout) {
+async function cmdAudit(args, options, stdout, stderr) {
   const snapshotName = removeOption(args, '--snapshot');
   const diffName = removeOption(args, '--diff');
-  const { localTools } = resolveScan(args, options);
+  // Reuse resolveScan's resolved {cwd, home, fs} for the claude-cli collector
+  // too, rather than recomputing separately — otherwise a --scan <path>
+  // consumed here would leave the collector reading process.cwd() while the
+  // local-tools scan read the --scan path, silently describing two different
+  // projects in the same report.
+  const { localTools, cwd: scanCwd, home: scanHome, fs: scanFs } = resolveScan(args, options);
   const localFindings = auditSetup(localTools ?? []);
-
-  const scanCwd = options.scanCwd ?? process.cwd();
-  const scanHome = options.scanHome ?? os.homedir();
-  const scanFs = options.fsImpl ?? fs;
 
   const collected = await collectClaudeAudit({
     cwd: scanCwd,
     home: scanHome,
     fs: scanFs,
     execImpl: options.execImpl,
+    now: options.now,
   });
   const cliFindings = analyzeClaudeAudit(collected, { cwd: scanCwd, fs: scanFs });
 
   if (snapshotName) {
-    writeSnapshot(snapshotName, collected, { fsImpl: options.fsImpl });
+    const saved = writeSnapshot(snapshotName, collected, { fsImpl: scanFs });
+    if (!saved) stderr(`Warning: could not save snapshot "${snapshotName}" (invalid name or write failure).\n`);
   }
 
   let diffResult = null;
   if (diffName) {
-    const prior = readSnapshot(diffName, { fsImpl: options.fsImpl });
+    const prior = readSnapshot(diffName, { fsImpl: scanFs });
     diffResult = diffSnapshots(prior, collected);
   }
 

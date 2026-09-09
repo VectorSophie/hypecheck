@@ -92,3 +92,35 @@ test('audit --diff against a missing snapshot reports "nothing to diff against",
   assert.match(out.join(''), /nothing to diff against/);
   assert.equal(typeof code, 'number');
 });
+
+test('audit --scan uses the same resolved directory for both local findings and claude-cli findings', async () => {
+  const { runCli } = await import('../bin/hypecheck.js');
+  const seenConfigPaths = [];
+  const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: (p) => {
+      seenConfigPaths.push(p);
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+    readdirSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    statSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+  };
+  await runCli(['audit', '--scan', '/other/project'], { stdout: () => {}, stderr: () => {}, scanCwd: '/proj', scanHome: '/home', fsImpl: fs, execImpl });
+  assert.ok(seenConfigPaths.some((p) => p.startsWith('/other/project/')), `expected a config read under /other/project/, saw: ${seenConfigPaths.join(', ')}`);
+  assert.ok(!seenConfigPaths.some((p) => p.startsWith('/proj/')), `claude-cli collector should not have read from the un-scanned /proj/, saw: ${seenConfigPaths.join(', ')}`);
+});
+
+test('audit --snapshot warns on stderr when the snapshot name is rejected', async () => {
+  const { runCli } = await import('../bin/hypecheck.js');
+  const errOut = [];
+  const execImpl = async () => { const e = new Error('nf'); e.code = 'ENOENT'; throw e; };
+  const fs = {
+    readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    readdirSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    statSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+    mkdirSync: () => {},
+    writeFileSync: () => { throw new Error('should not be called for an invalid name'); },
+  };
+  await runCli(['audit', '--snapshot', '../escape'], { stdout: () => {}, stderr: (t) => errOut.push(t), scanCwd: '/proj', scanHome: '/home', fsImpl: fs, execImpl });
+  assert.match(errOut.join(''), /could not save snapshot/);
+});
