@@ -46,6 +46,8 @@ export async function evaluateCandidate(input, options = {}) {
 // candidate produces a rollup with no drift detection and no cache write,
 // with no error or warning to the user.
 function evaluateMultiComponent(data, options) {
+  const allComponentPaths = data.components.map((c) => c.path);
+
   const components = data.components.map((component) => {
     const componentData = {
       ...data,
@@ -53,6 +55,7 @@ function evaluateMultiComponent(data, options) {
       candidateCommands: component.commands,
       hookScripts: component.hookScripts ?? {},
       componentRoot: component.path,
+      discovery: scopeDiscoveryToComponent(data.discovery, component.path, allComponentPaths),
       components: undefined,
     };
     const analysis = analyzeCandidate(componentData, options);
@@ -66,6 +69,28 @@ function evaluateMultiComponent(data, options) {
     componentCount: components.length,
     components,
     discovery: data.discovery,
+  };
+}
+
+// Scopes discovery's repo-wide scanned/skipped path lists down to just the
+// paths that belong to ONE component, so Phase 3's benchmark-directory
+// detection (and any other future discovery-derived signal) doesn't leak
+// evidence from one marketplace plugin into an unrelated sibling. Mirrors
+// discovery.js's own "most specific root wins" component-assignment logic:
+// a non-root component owns paths under its own prefix; the root component
+// owns everything NOT claimed by a more specific sibling.
+function scopeDiscoveryToComponent(discovery, componentPath, allComponentPaths) {
+  if (!discovery) return discovery;
+
+  const isOwnedByThisComponent = (path) => {
+    if (componentPath) return path === componentPath || path.startsWith(`${componentPath}/`);
+    return !allComponentPaths.some((p) => p && (path === p || path.startsWith(`${p}/`)));
+  };
+
+  return {
+    ...discovery,
+    scanned: (discovery.scanned ?? []).filter(isOwnedByThisComponent),
+    skipped: (discovery.skipped ?? []).filter((s) => isOwnedByThisComponent(s.path)),
   };
 }
 

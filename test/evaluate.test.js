@@ -137,3 +137,35 @@ test('multi-component rollup threads hookScripts/componentRoot per component int
     assert.ok(component.verdict);
   }
 });
+
+test('multi-component: benchmark evidence in one plugin does not leak TOKEN_WIN into an unrelated sibling plugin', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [
+        { path: '.claude-plugin/marketplace.json', type: 'blob', size: 40 },
+        { path: 'plugins/a/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+        { path: 'plugins/a/bench/results.json', type: 'blob', size: 20 },
+        { path: 'plugins/b/.claude-plugin/plugin.json', type: 'blob', size: 20 },
+      ] });
+    }
+    if (url.endsWith('/contents/.claude-plugin/marketplace.json')) {
+      return contentsResponse({ plugins: [{ name: 'a', source: './plugins/a' }, { name: 'b', source: './plugins/b' }] });
+    }
+    if (url.endsWith('/contents/plugins/a/.claude-plugin/plugin.json')) return contentsResponse({ name: 'a' });
+    if (url.endsWith('/contents/plugins/b/.claude-plugin/plugin.json')) return contentsResponse({ name: 'b' });
+    return jsonResponse(null, false);
+  };
+
+  const report = await evaluateCandidate('o/r', { fetchImpl });
+
+  assert.equal(report.multiComponent, true);
+  const pluginA = report.components.find((c) => c.path === 'plugins/a');
+  const pluginB = report.components.find((c) => c.path === 'plugins/b');
+
+  assert.equal(pluginA.tokenEconomics.evidenceTier, 'benchmarked');
+  assert.ok(pluginA.labels.includes('TOKEN_WIN'));
+
+  assert.notEqual(pluginB.tokenEconomics.evidenceTier, 'benchmarked', 'plugin b has no benchmark of its own — it must not inherit plugin a\'s evidence');
+  assert.ok(!pluginB.labels.includes('TOKEN_WIN'), 'plugin b must not get TOKEN_WIN from an unrelated sibling\'s benchmark directory');
+});
