@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getClaudeVersion, listPlugins, getPluginDetails } from '../src/claude-cli.js';
+import { getClaudeVersion, listPlugins, getPluginDetails, readClaudeConfigFiles } from '../src/claude-cli.js';
 
 test('getClaudeVersion returns connected state with trimmed version string', async () => {
   const execImpl = async (cmd, args) => {
@@ -67,4 +67,29 @@ test('getPluginDetails passes the plugin id through as an argument', async () =>
 test('claude mcp list/get are never invoked by this module (source scan)', () => {
   const source = fs.readFileSync(fileURLToPath(new URL('../src/claude-cli.js', import.meta.url)), 'utf8');
   assert.doesNotMatch(source, /['"]mcp['"]/);
+});
+
+test('readClaudeConfigFiles reads project and global config when present', () => {
+  const fs = {
+    readFileSync: (p) => {
+      if (p === '/proj/.claude/settings.json') return JSON.stringify({ hooks: {} });
+      if (p === '/home/.claude.json') return JSON.stringify({ mcpServers: { db: {} } });
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    },
+  };
+  const result = readClaudeConfigFiles({ cwd: '/proj', home: '/home', fs });
+  assert.deepEqual(result.projectSettings, { hooks: {} });
+  assert.deepEqual(result.globalClaudeJson, { mcpServers: { db: {} } });
+  assert.equal(result.projectSettingsLocal, null);
+});
+
+test('readClaudeConfigFiles tolerates malformed JSON', () => {
+  const fs = { readFileSync: () => 'not valid json' };
+  const result = readClaudeConfigFiles({ cwd: '/proj', fs });
+  assert.equal(result.projectSettings, null);
+});
+
+test('readClaudeConfigFiles is a no-op with no cwd/home', () => {
+  const fs = { readFileSync: () => { throw new Error('should not be called'); } };
+  assert.deepEqual(readClaudeConfigFiles({ fs }), {});
 });

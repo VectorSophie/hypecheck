@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import nodeFs from 'node:fs';
 import { redactText } from './redact.js';
 
 const execFileAsync = promisify(execFile);
@@ -63,4 +64,36 @@ export async function getPluginDetails(pluginId, options = {}) {
   const result = await runClaude(['plugin', 'details', pluginId], options);
   if (result.state !== 'connected') return result;
   return { state: 'connected', details: result.stdout };
+}
+
+// Mirrors src/local-context.js's exact fs-injection convention: plain
+// string path-joining (never node:path), since `fs` here is a test seam
+// receiving fixture-string paths, not real filesystem paths that need
+// platform-correct separators.
+const join = (...parts) => parts.join('/');
+
+function readJsonConfig(filePath, fs) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath));
+  } catch {
+    return null;
+  }
+}
+
+// Best-effort static config reads — these represent "configured" state
+// (what the files SAY), not "recognized"/"enabled" (what the CLI actually
+// does with them — that cross-reference happens in the collector, Task 4).
+// Never throws; a missing/malformed file is just absent from the result.
+export function readClaudeConfigFiles({ cwd, home, fs = nodeFs } = {}) {
+  const files = {};
+  if (cwd) {
+    files.projectSettings = readJsonConfig(join(cwd, '.claude', 'settings.json'), fs);
+    files.projectSettingsLocal = readJsonConfig(join(cwd, '.claude', 'settings.local.json'), fs);
+    files.projectMcp = readJsonConfig(join(cwd, '.mcp.json'), fs);
+  }
+  if (home) {
+    files.globalSettings = readJsonConfig(join(home, '.claude', 'settings.json'), fs);
+    files.globalClaudeJson = readJsonConfig(join(home, '.claude.json'), fs);
+  }
+  return files;
 }
