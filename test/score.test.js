@@ -87,6 +87,28 @@ test('a bare README secret mention alone cannot reach DANGEROUS', () => {
   assert.notEqual(scored.verdict, 'DANGEROUS');
 });
 
+test('a single fully-inspected benign hook does not push the verdict to DANGEROUS', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'hook-benign-bounded', category: 'security', severity: 'low', title: 't', evidence: 'x' },
+  ], { hasUniqueCapability: true }));
+  assert.notEqual(scored.verdict, 'DANGEROUS');
+});
+
+test('two observed-dangerous hook capabilities push the verdict to DANGEROUS', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'hook-dangerous-capability', category: 'security', severity: 'high', title: 't', evidence: 'x' },
+    { id: 'hook-permission-bypass', category: 'security', severity: 'high', title: 't', evidence: 'x' },
+  ], { hasUniqueCapability: true }));
+  assert.equal(scored.verdict, 'DANGEROUS');
+});
+
+test('a single unverified-powerful hook alone does not reach DANGEROUS', () => {
+  const scored = scoreAnalysis(base([
+    { id: 'hook-unverified-powerful', category: 'security', severity: 'medium', title: 't', evidence: 'x' },
+  ], { hasUniqueCapability: true }));
+  assert.notEqual(scored.verdict, 'DANGEROUS');
+});
+
 test('roast summary still works with no findings', () => {
   const scored = scoreAnalysis(base([]));
   assert.equal(typeof scored.summary, 'string');
