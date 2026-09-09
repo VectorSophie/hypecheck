@@ -35,6 +35,15 @@ export function renderMarkdownReport(report) {
     }
   }
 
+  const tokenEconomics = tokenEconomicsLines(report.tokenEconomics);
+  if (tokenEconomics.length) {
+    // Drop the helper's own trailing blank here: whatever section follows
+    // (Could Not Verify) supplies its own leading blank separator, and if
+    // nothing follows, no dangling blank line is needed at EOF either —
+    // matches the Evidence section's existing no-trailing-blank convention.
+    lines.push('', ...tokenEconomics.slice(0, -1));
+  }
+
   if (report.unknowns?.length) {
     lines.push('', '## Could Not Verify', '');
     for (const unknown of report.unknowns) {
@@ -43,6 +52,35 @@ export function renderMarkdownReport(report) {
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+// Minimal token-economics section — richer secondary-label rendering and
+// cross-report comparison views are Phase 5 scope. This ships a real,
+// useful summary now: evidence tier, the raw claim (if any), which
+// mechanisms were found and where, and the benchmark path (if any).
+function tokenEconomicsLines(tokenEconomics) {
+  if (!tokenEconomics || tokenEconomics.evidenceTier === 'unknown') return [];
+
+  const lines = ['## Token economics', '', `Evidence: ${tokenEconomics.evidenceTier}`];
+
+  if (tokenEconomics.claim) {
+    lines.push(`Claimed savings: ${tokenEconomics.claim.percentage}% — "${tokenEconomics.claim.quote}"`);
+  }
+  if (tokenEconomics.mechanisms.fromSource.length > 0) {
+    lines.push(`Mechanisms observed in fetched source: ${tokenEconomics.mechanisms.fromSource.join(', ')}`);
+  }
+  if (tokenEconomics.mechanisms.fromReadme.length > 0) {
+    lines.push(`Mechanisms mentioned in README (not verified in source): ${tokenEconomics.mechanisms.fromReadme.join(', ')}`);
+  }
+  if (tokenEconomics.benchmark.present) {
+    lines.push(`Benchmark found: ${tokenEconomics.benchmark.paths.join(', ')}`);
+  }
+  if (tokenEconomics.labels.length > 0) {
+    lines.push(`Labels: ${tokenEconomics.labels.join(', ')}`);
+  }
+
+  lines.push('');
+  return lines;
 }
 
 export function renderMultiComponentReport(result) {
