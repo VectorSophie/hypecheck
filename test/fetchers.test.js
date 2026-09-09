@@ -110,6 +110,24 @@ test('GitHub fetch honors an addressed subpath', async () => {
   assert.equal(data.manifests.plugin.name, 'shunt');
 });
 
+test('GitHub fetch exposes hookScripts and componentRoot for the primary component', async () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/owner/repo')) return jsonResponse({ full_name: 'owner/repo', size: 10, default_branch: 'main' });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [{ path: 'hooks/hooks.json', type: 'blob', size: 20 }] });
+    }
+    if (url.endsWith('/contents/hooks/hooks.json')) {
+      return jsonResponse({ content: b64({ hooks: { PreToolUse: [{ hooks: [{ command: 'node hooks/route.js' }] }] } }) });
+    }
+    if (url.endsWith('/contents/hooks/route.js')) return jsonResponse({ content: Buffer.from('console.log("ok")').toString('base64') });
+    return jsonResponse(null, false);
+  };
+  const data = await fetchCandidateData({ type: 'github', owner: 'owner', repo: 'repo' }, { fetchImpl });
+  assert.equal(data.hookScripts['hooks/route.js'], 'console.log("ok")');
+  assert.equal(data.componentRoot, '');
+});
+
 test('fetches npm metadata and extracts package signals', async () => {
   const fetchImpl = async (url) => {
     assert.equal(url, 'https://registry.npmjs.org/execa');

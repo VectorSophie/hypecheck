@@ -51,6 +51,8 @@ function evaluateMultiComponent(data, options) {
       ...data,
       manifests: component.manifests,
       candidateCommands: component.commands,
+      hookScripts: component.hookScripts ?? {},
+      componentRoot: component.path,
       components: undefined,
     };
     const analysis = analyzeCandidate(componentData, options);

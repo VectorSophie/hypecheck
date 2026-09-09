@@ -50,7 +50,7 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
     subpath: candidate.subpath ?? '',
   });
 
-  const primary = discovery.components[0] ?? { manifests: { plugin: null, hooks: null, mcp: null }, commands: [] };
+  const primary = discovery.components[0] ?? { manifests: { plugin: null, hooks: null, mcp: null }, commands: [], hookScripts: {}, path: '' };
 
   return {
     source: 'github',
@@ -58,6 +58,8 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
     package: pkg,
     manifests: primary.manifests,
     candidateCommands: primary.commands,
+    hookScripts: primary.hookScripts ?? {},
+    componentRoot: primary.path ?? '',
     components: discovery.components,
     discovery: {
       marketplace: discovery.marketplace,
