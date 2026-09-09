@@ -5,10 +5,14 @@
 
 const SENSITIVE_KEY = /token|secret|password|passwd|api[_-]?key|authoriz(?:ation|ed)|credential|cookie|private[_-]?key/i;
 
-// Non-global version for use in .test() calls — avoids lastIndex side effects
-const SECRET_SUBSTRING_TEST = new RegExp(
-  /\b(Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})/.source
-);
+// Single canonical list of secret-shaped patterns, used by both redact()
+// (whole-value redaction, via the non-global SECRET_SUBSTRING_TEST) and
+// redactText() (in-place substring replacement, needs the `g` flag).
+const SECRET_SUBSTRING = /\b(Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})/g;
+// Non-global copy for .test() calls — a global regex's .test() advances
+// lastIndex as a side effect, which would cause intermittent false
+// negatives across redact()'s repeated calls.
+const SECRET_SUBSTRING_TEST = new RegExp(SECRET_SUBSTRING.source);
 
 export function redact(value, key = '') {
   if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
@@ -29,8 +33,6 @@ export function redact(value, key = '') {
 // For raw string blobs (CLI stdout/stderr, error messages) where secret-
 // shaped substrings might appear anywhere, not just as a whole value under a
 // suspicious key.
-const SECRET_SUBSTRING = /\b(Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Za-z0-9]{12,})/g;
-
 export function redactText(text) {
   if (typeof text !== 'string') return text;
   return text.replace(SECRET_SUBSTRING, '[REDACTED]');
