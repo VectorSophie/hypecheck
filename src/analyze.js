@@ -2,6 +2,7 @@ import { extractPackageSignals, extractHookEvents, extractMcpServers } from './e
 import { tagCapabilities, matchStrength } from './capabilities.js';
 import { tagTech } from './profile.js';
 import { classifyHook } from './hook-analysis.js';
+import { computeTokenEconomics } from './token-economics.js';
 
 const SHELL_DEPS = new Set(['execa', 'shelljs', 'zx', 'cross-spawn', 'child_process']);
 
@@ -26,6 +27,7 @@ export function analyzeCandidate(data, options = {}) {
   const localTools = options.localTools;
   if (localTools) analyzeCollisions(hookEvents, mcpServers, data.candidateCommands ?? [], localTools, findings);
   const redundancy = analyzeRedundancy(data, targetName, localTools, findings);
+  const tokenEconomics = computeTokenEconomics(data, data.discovery);
 
   return {
     candidate: data.candidate,
@@ -36,6 +38,8 @@ export function analyzeCandidate(data, options = {}) {
     scanned: Boolean(localTools),
     fit: computeFit(data, targetName, options.userProfile),
     unknowns: redundancy.unknowns,
+    tokenEconomics,
+    labels: tokenEconomics.labels,
   };
 }
 

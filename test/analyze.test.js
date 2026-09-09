@@ -312,3 +312,33 @@ test('renders a stack-fit note when the fit signal is set', () => {
   const none = renderMarkdownReport({ ...base, fit: { signal: 'none' } });
   assert.doesNotMatch(none, /Stack fit:/);
 });
+
+test('analyzeCandidate attaches tokenEconomics with a claimed-tier result', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' },
+    readme: 'This plugin saves 85% of your context window.',
+    manifests: { plugin: null, hooks: null, mcp: null },
+  });
+  assert.equal(analysis.tokenEconomics.evidenceTier, 'claimed');
+  assert.equal(analysis.tokenEconomics.claim.percentage, 85);
+  assert.ok(analysis.labels.includes('TOKEN_UNPROVEN'));
+});
+
+test('analyzeCandidate attaches tokenEconomics with an unknown-tier result and no labels when nothing is found', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: 'A simple utility.',
+    manifests: { plugin: null, hooks: null, mcp: null },
+  });
+  assert.equal(analysis.tokenEconomics.evidenceTier, 'unknown');
+  assert.deepEqual(analysis.labels, []);
+});
+
+test('analyzeCandidate tokenEconomics uses discovery.scanned/skipped when present', () => {
+  const analysis = analyzeCandidate({
+    source: 'github', metadata: { fullName: 'a/b' }, readme: 'no claim here',
+    manifests: { plugin: null, hooks: null, mcp: null },
+    discovery: { scanned: ['bench/results.json'], skipped: [] },
+  });
+  assert.equal(analysis.tokenEconomics.evidenceTier, 'benchmarked');
+  assert.ok(analysis.labels.includes('TOKEN_WIN'));
+});
