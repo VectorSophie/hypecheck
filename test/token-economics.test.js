@@ -18,6 +18,21 @@ test('extracts a "cuts token usage by N%" style claim', () => {
   assert.equal(result.percentage, 40);
 });
 
+test('does not false-positive on "cutting-edge" marketing phrasing near an unrelated percentage', () => {
+  assert.equal(extractClaimedSavings('a cutting-edge tool, 50% faster'), null);
+  assert.equal(extractClaimedSavings('cutting the deck, 12% faster shuffle'), null);
+});
+
+test('extracts a "reducing N%" gerund-style claim', () => {
+  const result = extractClaimedSavings('This library works by reducing token usage by 55% on average.');
+  assert.equal(result.percentage, 55);
+});
+
+test('extracts a "shrinking N%" gerund-style claim', () => {
+  const result = extractClaimedSavings('Focused on shrinking context size by 30% for large repos.');
+  assert.equal(result.percentage, 30);
+});
+
 test('returns null when no savings claim is present', () => {
   assert.equal(extractClaimedSavings('A generic MCP server for querying a database.'), null);
 });

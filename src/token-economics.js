@@ -3,7 +3,12 @@
 // this file) is the entry point most callers want — the functions above it
 // are its independently-testable building blocks.
 
-const SAVINGS_PATTERN = /(?:sav(?:es?|ing)|reduc(?:es?|ing)|cut(?:s|ting)?|shrink(?:s|ing)?)\b[^.\n%]{0,60}?(\d{1,3})\s*%|(\d{1,3})\s*%\s*(?:reduction|savings?|smaller|fewer|less)\b/i;
+// "cut" deliberately does NOT get gerund support here (no "cutting") —
+// "cutting-edge" is extremely common marketing phrasing and would false-
+// positive-match against any nearby percentage (e.g. "a cutting-edge tool,
+// 100% test coverage"). "saving"/"reducing"/"shrinking" don't have a
+// comparably common idiomatic collision, so they keep gerund support.
+const SAVINGS_PATTERN = /(?:sav(?:es?|ing)|reduc(?:es?|ing)|cuts?|shrink(?:s|ing)?)\b[^.\n%]{0,60}?(\d{1,3})\s*%|(\d{1,3})\s*%\s*(?:reduction|savings?|smaller|fewer|less)\b/i;
 
 // Extracts a percentage-based savings claim from free text (a README, a
 // package description, etc). Returns { percentage, quote } or null. A
