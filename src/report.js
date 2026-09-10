@@ -6,6 +6,17 @@ export function renderMarkdownReport(report) {
     '',
     report.summary,
     '',
+  ];
+
+  // Rendered immediately after the verdict/summary, before Scores — this is
+  // meant to be the attention-grabbing highlight for the scariest evidence,
+  // which only works if it actually sits near the top of the document.
+  const privilegedSection = privilegedBehaviorLines(report.findings);
+  if (privilegedSection.length > 0) {
+    lines.push(...privilegedSection, '');
+  }
+
+  lines.push(
     ...(report.scanned ? [report.hasUniqueCapability
       ? 'Fit: adds capability your current setup does not obviously cover.'
       : 'Fit: overlaps tools you already run — little net-new capability.', '']
@@ -25,7 +36,7 @@ export function renderMarkdownReport(report) {
     '',
     '## Evidence',
     '',
-  ];
+  );
 
   if (report.findings.length === 0) {
     lines.push('- No concrete risk findings from the inspected metadata.');
@@ -40,13 +51,8 @@ export function renderMarkdownReport(report) {
     lines.push('', ...tokenEconomicsSection);
   }
 
-  const privilegedSection = privilegedBehaviorLines(report.findings);
-  if (privilegedSection.length > 0) {
-    lines.push('', ...privilegedSection);
-  }
-
   if (report.labels?.length > 0) {
-    lines.push('', `Labels: ${report.labels.join(', ')}`);
+    lines.push('', '## Labels', '', report.labels.join(', '));
   }
 
   if (report.unknowns?.length) {
@@ -80,9 +86,10 @@ function tokenEconomicsLines(tokenEconomics) {
   if (tokenEconomics.benchmark.present) {
     lines.push(`Benchmark found: ${tokenEconomics.benchmark.paths.join(', ')}`);
   }
-  if (tokenEconomics.labels.length > 0) {
-    lines.push(`Labels: ${tokenEconomics.labels.join(', ')}`);
-  }
+  // No per-section "Labels:" line here — tokenEconomics.labels is a subset
+  // of the top-level report.labels (analyze.js merges it in), which already
+  // gets its own "## Labels" section below. Rendering it here too produced
+  // a literal duplicate line when token-economics labels were present.
 
   return lines;
 }
@@ -103,6 +110,13 @@ function privilegedBehaviorLines(findings) {
   return lines;
 }
 
+// KNOWN LIMITATION: per-component sub-reports here render only path/verdict/
+// summary — no Evidence bullets, no Privileged behavior section, no Labels,
+// unlike renderMarkdownReport. A dangerous hook inside one marketplace
+// plugin gets LESS surfacing in a multi-component rollup than the identical
+// hook would get in a single-component report. Pre-existing gap, deliberately
+// out of scope for Phase 5 per its own design notes, but worth a near-term
+// follow-up now that the single-component renderer has grown richer.
 export function renderMultiComponentReport(result) {
   const lines = [
     `# Hypecheck: ${result.targetName}`,

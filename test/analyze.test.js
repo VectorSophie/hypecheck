@@ -348,6 +348,51 @@ test('omits the Privileged behavior section when no hook-dangerous-capability/pe
   assert.doesNotMatch(text, /## Privileged behavior/);
 });
 
+test('Privileged behavior renders near the top of the report, before Scores, not buried near the bottom', () => {
+  const report = {
+    targetName: 'sketchy-plugin',
+    verdict: 'DANGEROUS',
+    summary: 'Dangerous.',
+    scanned: false,
+    fit: { signal: 'none' },
+    scores: { workflowFit: 5, redundancy: 1, securityRisk: 9, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 10 },
+    confidence: 'high',
+    findings: [
+      { id: 'hook-dangerous-capability', severity: 'high', category: 'security', title: 'Hook has an observed dangerous capability', evidence: 'A PreToolUse hook runs curl|sh.', provenance: 'source' },
+    ],
+    labels: ['POWERFUL_HOOK'],
+  };
+  const text = renderMarkdownReport(report);
+  const privilegedIndex = text.indexOf('## Privileged behavior');
+  const scoresIndex = text.indexOf('## Scores');
+  assert.ok(privilegedIndex !== -1 && scoresIndex !== -1);
+  assert.ok(privilegedIndex < scoresIndex, 'Privileged behavior must render before Scores, not near the bottom of the report');
+});
+
+test('does not render a duplicate Labels line when a token-economics label overlaps with the top-level labels array', () => {
+  const report = {
+    targetName: 'x',
+    verdict: 'INSTALL',
+    summary: 'Install.',
+    scanned: false,
+    fit: { signal: 'none' },
+    scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 5 },
+    confidence: 'low',
+    findings: [],
+    tokenEconomics: {
+      evidenceTier: 'claimed',
+      claim: { percentage: 80, quote: 'saves 80%' },
+      mechanisms: { fromSource: [], fromReadme: [] },
+      benchmark: { present: false, paths: [] },
+      labels: ['TOKEN_UNPROVEN'],
+    },
+    labels: ['TOKEN_UNPROVEN'],
+  };
+  const text = renderMarkdownReport(report);
+  const labelOccurrences = text.split('TOKEN_UNPROVEN').length - 1;
+  assert.equal(labelOccurrences, 1, `expected TOKEN_UNPROVEN to appear exactly once in the report, got:\n${text}`);
+});
+
 test('renders a Labels line when the labels array is non-empty', () => {
   const report = {
     targetName: 'x',
@@ -361,16 +406,16 @@ test('renders a Labels line when the labels array is non-empty', () => {
     labels: ['EXACT_DUPLICATE', 'GLOBAL_SCOPE_OVERKILL'],
   };
   const text = renderMarkdownReport(report);
-  assert.match(text, /Labels: EXACT_DUPLICATE, GLOBAL_SCOPE_OVERKILL/);
+  assert.match(text, /## Labels\n\nEXACT_DUPLICATE, GLOBAL_SCOPE_OVERKILL/);
 });
 
-test('omits the Labels line when labels is empty or absent', () => {
+test('omits the Labels section when labels is empty or absent', () => {
   const report = {
     targetName: 'x', verdict: 'INSTALL', summary: 'Install.', scanned: false, fit: { signal: 'none' },
     scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 5 },
     confidence: 'low', findings: [], labels: [],
   };
-  assert.doesNotMatch(renderMarkdownReport(report), /Labels:/);
+  assert.doesNotMatch(renderMarkdownReport(report), /## Labels/);
 });
 
 test('analyzeCandidate attaches tokenEconomics with a claimed-tier result', () => {

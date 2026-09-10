@@ -233,7 +233,7 @@ test('eval output renders all Token economics branches: claim, source mechanism,
   assert.match(out, /Mechanisms observed in fetched source:.*cheap-model-delegation/);
   assert.match(out, /Mechanisms mentioned in README \(not verified in source\):.*cheap-model-delegation/);
   assert.match(out, /Benchmark found:.*bench\/results\.json/);
-  assert.match(out, /Labels:.*TOKEN_WIN/);
+  assert.match(out, /## Labels\n\nTOKEN_WIN/);
 });
 
 function jsonResponse(body, ok = true) {
