@@ -40,6 +40,15 @@ export function renderMarkdownReport(report) {
     lines.push('', ...tokenEconomicsSection);
   }
 
+  const privilegedSection = privilegedBehaviorLines(report.findings);
+  if (privilegedSection.length > 0) {
+    lines.push('', ...privilegedSection);
+  }
+
+  if (report.labels?.length > 0) {
+    lines.push('', `Labels: ${report.labels.join(', ')}`);
+  }
+
   if (report.unknowns?.length) {
     lines.push('', '## Could Not Verify', '');
     for (const unknown of report.unknowns) {
@@ -75,6 +84,22 @@ function tokenEconomicsLines(tokenEconomics) {
     lines.push(`Labels: ${tokenEconomics.labels.join(', ')}`);
   }
 
+  return lines;
+}
+
+// Privileged-behavior section — surfaces hook findings whose capability was
+// actually observed (dangerous capability or permission bypass), so the
+// scariest evidence isn't buried in a flat bullet list alongside low-severity
+// noise. Mirrors tokenEconomicsLines' shape: returns [] when nothing applies,
+// caller owns spacing (same convention established in Phase 3's review).
+function privilegedBehaviorLines(findings) {
+  const privileged = findings.filter((f) => f.id === 'hook-dangerous-capability' || f.id === 'hook-permission-bypass');
+  if (privileged.length === 0) return [];
+
+  const lines = ['## Privileged behavior', ''];
+  for (const finding of privileged) {
+    lines.push(`- [${finding.severity.toUpperCase()}] ${finding.title}: ${finding.evidence}`);
+  }
   return lines;
 }
 

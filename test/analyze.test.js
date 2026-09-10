@@ -313,6 +313,66 @@ test('renders a stack-fit note when the fit signal is set', () => {
   assert.doesNotMatch(none, /Stack fit:/);
 });
 
+test('renders a Privileged behavior section when a dangerous-capability or permission-bypass hook finding is present', () => {
+  const report = {
+    targetName: 'sketchy-plugin',
+    verdict: 'DANGEROUS',
+    summary: 'Dangerous.',
+    scanned: false,
+    fit: { signal: 'none' },
+    scores: { workflowFit: 5, redundancy: 1, securityRisk: 9, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 10 },
+    confidence: 'high',
+    findings: [
+      { id: 'hook-dangerous-capability', severity: 'high', category: 'security', title: 'Hook has an observed dangerous capability', evidence: 'A PreToolUse hook runs curl|sh.', provenance: 'source' },
+    ],
+    labels: ['POWERFUL_HOOK'],
+  };
+  const text = renderMarkdownReport(report);
+  assert.match(text, /## Privileged behavior/);
+  assert.match(text, /curl\|sh/);
+});
+
+test('omits the Privileged behavior section when no hook-dangerous-capability/permission-bypass finding exists', () => {
+  const report = {
+    targetName: 'clean-tool',
+    verdict: 'INSTALL',
+    summary: 'Install.',
+    scanned: false,
+    fit: { signal: 'none' },
+    scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 5 },
+    confidence: 'low',
+    findings: [],
+    labels: [],
+  };
+  const text = renderMarkdownReport(report);
+  assert.doesNotMatch(text, /## Privileged behavior/);
+});
+
+test('renders a Labels line when the labels array is non-empty', () => {
+  const report = {
+    targetName: 'x',
+    verdict: 'INSTALL',
+    summary: 'Install.',
+    scanned: false,
+    fit: { signal: 'none' },
+    scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 5 },
+    confidence: 'low',
+    findings: [],
+    labels: ['EXACT_DUPLICATE', 'GLOBAL_SCOPE_OVERKILL'],
+  };
+  const text = renderMarkdownReport(report);
+  assert.match(text, /Labels: EXACT_DUPLICATE, GLOBAL_SCOPE_OVERKILL/);
+});
+
+test('omits the Labels line when labels is empty or absent', () => {
+  const report = {
+    targetName: 'x', verdict: 'INSTALL', summary: 'Install.', scanned: false, fit: { signal: 'none' },
+    scores: { workflowFit: 6, redundancy: 1, securityRisk: 2, maintenanceHealth: 8, setupBurden: 2, budgetPressure: 3, overkillIndex: 5 },
+    confidence: 'low', findings: [], labels: [],
+  };
+  assert.doesNotMatch(renderMarkdownReport(report), /Labels:/);
+});
+
 test('analyzeCandidate attaches tokenEconomics with a claimed-tier result', () => {
   const analysis = analyzeCandidate({
     source: 'github', metadata: { fullName: 'a/b' },
