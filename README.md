@@ -76,8 +76,9 @@ Install. The evidence does not scream at us yet.
 - **Stack fit** — reads your permissions allowlist and project manifests (known locations only) to learn your stack, then notes whether the candidate targets it. *"Stack fit: targets Rust, which your setup doesn't show."* Advisory — it nudges the Workflow Fit score, never the verdict.
 - **Maintenance** — license, staleness, release recency.
 - **Setup burden & budget pressure** — global installs, tool-call volume, context bloat.
+- **Token economics** — if the candidate claims it saves tokens/context, Hypecheck grades the evidence behind the claim: a benchmark directory beats a mechanism found in real hook source, which beats a mechanism only mentioned in prose, which beats a bare percentage with nothing backing it up.
 
-Findings drive everything. No finding, no verdict change.
+Findings drive everything. No finding, no verdict change. Some reports also carry secondary labels — `TOKEN_WIN`, `EXACT_DUPLICATE`, `POWERFUL_HOOK`, and similar — that flag a pattern worth a second look without moving the score themselves.
 
 ## Install
 
@@ -96,14 +97,16 @@ Then `/hypecheck <github-url | npm-package | x-link>`.
 npx @jackochesstern/hypecheck eval @modelcontextprotocol/server-filesystem
 npx @jackochesstern/hypecheck eval https://github.com/owner/repo --json
 npx @jackochesstern/hypecheck compare owner/repo-a owner/repo-b
-npx @jackochesstern/hypecheck explain configured-hook
+npx @jackochesstern/hypecheck explain hook-dangerous-capability
 npx @jackochesstern/hypecheck audit
+npx @jackochesstern/hypecheck audit --snapshot baseline
+npx @jackochesstern/hypecheck audit --diff baseline
 ```
 
 - `eval` — score one candidate. `--no-scan` skips the local redundancy/collision scan; `--scan <path>` points it at another project.
 - `compare A B` — evaluate two candidates side by side.
 - `explain <finding-id>` — why a finding matters and how to verify it yourself.
-- `audit` — turn the lens on *your own* installed setup: redundant tools, hook collisions, and risky hooks you're already running.
+- `audit` — turn the lens on *your own* installed setup: redundant tools, hook collisions, and risky hooks you're already running. `--snapshot <name>` saves the result to `~/.hypecheck/audits/<name>.json`; `--diff <name>` compares this run against a saved snapshot and reports what changed since — new hooks, new MCP servers, anything that showed up without you noticing.
 - `--track` (on `eval`) — opt-in. Caches the candidate's public surface to `~/.hypecheck/` and, on the next `--track` run, flags **drift**: hooks or MCP servers added since you last vetted it (the rug-pull case). Off by default; reads/writes nothing without it, and never stores your config or secrets.
 
 It also cross-references the candidate's hooks/MCP servers against your local `.claude` config and flags **collisions** — "adds a PostToolUse hook; you already run 2 on that event."
