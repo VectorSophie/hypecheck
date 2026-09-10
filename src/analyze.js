@@ -1,5 +1,5 @@
 import { extractPackageSignals, extractHookEvents, extractMcpServers } from './extractors.js';
-import { tagCapabilities, matchStrength } from './capabilities.js';
+import { tagCapabilities, matchStrength, classifyOverlap } from './capabilities.js';
 import { tagTech } from './profile.js';
 import { classifyHook } from './hook-analysis.js';
 import { computeTokenEconomics } from './token-economics.js';
@@ -30,6 +30,12 @@ export function analyzeCandidate(data, options = {}) {
   const redundancy = analyzeRedundancy(data, targetName, localTools, findings);
   const tokenEconomics = computeTokenEconomics(data, data.discovery);
 
+  const hookLabels = [];
+  if (findings.some((f) => f.id === 'hook-dangerous-capability')) hookLabels.push('POWERFUL_HOOK');
+  if (findings.some((f) => f.id === 'hook-permission-bypass')) hookLabels.push('HOOK_PERMISSION_BYPASS');
+
+  const labels = [...new Set([...tokenEconomics.labels, ...redundancy.overlapLabels, ...hookLabels])];
+
   return {
     candidate: data.candidate,
     source: data.source,
@@ -40,7 +46,7 @@ export function analyzeCandidate(data, options = {}) {
     fit: computeFit(data, targetName, options.userProfile),
     unknowns: redundancy.unknowns,
     tokenEconomics,
-    labels: tokenEconomics.labels,
+    labels,
   };
 }
 
@@ -61,7 +67,7 @@ function computeFit(data, targetName, userProfile) {
 
 function analyzeRedundancy(data, targetName, localTools, findings) {
   if (!localTools) {
-    return { hasUniqueCapability: true, unknowns: ['Local Claude Code context was not scanned.'] };
+    return { hasUniqueCapability: true, unknowns: ['Local Claude Code context was not scanned.'], overlapLabels: [] };
   }
 
   const bareName = String(targetName).split('/').pop();
@@ -69,6 +75,7 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
   const candidateTags = tagCapabilities(candidateText);
 
   let covered = false;
+  const overlapLabels = new Set();
   for (const tag of candidateTags) {
     if (localTools.some((tool) => tool.tags.has(tag))) covered = true;
   }
@@ -87,6 +94,10 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
       findings.push(redundantFinding('redundant-adjacent', 'weak', tool,
         `Adjacent to your existing ${tool.kind} \`${tool.name}\`.`));
     }
+
+    const overlap = classifyOverlap(candidateTags, tool.tags);
+    if (overlap === 'exact-duplicate') overlapLabels.add('EXACT_DUPLICATE');
+    else if (overlap === 'strong-overlap' || overlap === 'adjacent') overlapLabels.add('CAPABILITY_OVERLAP');
   }
 
   // Unique value: at least one candidate capability no local tool covers,
@@ -96,6 +107,7 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
   return {
     hasUniqueCapability,
     unknowns: [`Scanned local context: ${localTools.length} known tool(s). Tool behavior not inspected.`],
+    overlapLabels: [...overlapLabels],
   };
 }
 
