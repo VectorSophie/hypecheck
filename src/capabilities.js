@@ -12,13 +12,18 @@ const FAMILIES = {
   git: ['git ', 'commit', 'github cli', 'gh '],
   database: ['database', 'sql', 'postgres', 'sqlite'],
   docs: ['docs', 'documentation', 'readme generator'],
-  'coding-methodology': ['coding methodology', 'best practices', 'coding standard'],
+  'coding-methodology': ['coding methodology', 'coding standard'],
   planning: ['project planning', 'roadmap', 'task breakdown', 'spec writing'],
   tdd: ['tdd', 'test-driven', 'test driven development'],
   debugging: ['debugger', 'debugging', 'stack trace', 'breakpoint'],
+  // Deliberately co-occurs with the base `browser` family (both keywords
+  // contain "browser") — an intentional is-a relationship, not an oversight.
   'browser-automation': ['browser automation', 'headless browser', 'e2e test'],
-  'web-research': ['web research', 'web search', 'internet search'],
-  'social-research': ['social research', 'twitter research', 'reddit research'],
+  // Deliberately avoids the word "research" (it contains "search" as a
+  // literal substring — "web research" would silently also tag `search`,
+  // coupling two unrelated capabilities by accident, not by design).
+  'web-research': ['web browsing agent', 'internet lookup', 'crawls the web for information'],
+  'social-research': ['social media monitoring', 'twitter analysis', 'reddit analysis'],
   deployment: ['deploy', 'deployment', 'ci/cd', 'release pipeline'],
   'semantic-code-nav': ['semantic search', 'code navigation', 'symbol search'],
   lsp: ['language server', 'lsp ', 'go to definition'],
@@ -28,7 +33,10 @@ const FAMILIES = {
   'memory-retrieval': ['memory retrieval', 'long-term memory', 'vector memory'],
   'cheap-model-delegation': ['cheap model', 'delegate to haiku', 'model routing'],
   'git-github': ['github api', 'github integration', 'pull request automation'],
-  'cloud-provider': ['aws', 'gcp', 'azure', 'cloud provider'],
+  // ' aws' (leading space) rather than bare 'aws': the bare form is a
+  // substring of ordinary words (draws, flaws, withdraws, paws) and would
+  // false-positive on any README containing one of them.
+  'cloud-provider': [' aws', 'gcp', 'azure', 'cloud provider'],
   'security-scanning': ['vulnerability scan', 'security scan', 'sast', 'dast'],
   'agent-orchestration': ['agent orchestration', 'multi-agent', 'subagent coordination'],
 };

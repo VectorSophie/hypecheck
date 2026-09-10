@@ -76,3 +76,22 @@ test('existing families are untouched by the expansion', () => {
   assert.ok(tagCapabilities('runs prettier').has('formatting'));
   assert.ok(tagCapabilities('a jest test runner').has('testing'));
 });
+
+test('cloud-provider "aws" keyword does not false-positive on ordinary words containing that substring', () => {
+  assert.equal(tagCapabilities('This tool draws inspiration from several projects').has('cloud-provider'), false);
+  assert.equal(tagCapabilities('Highlights flaws in your code').has('cloud-provider'), false);
+  assert.equal(tagCapabilities('Automatically withdraws stale branches').has('cloud-provider'), false);
+});
+
+test('web-research and social-research do not accidentally tag the unrelated search family', () => {
+  assert.equal(tagCapabilities('a web browsing agent for internet lookup').has('search'), false);
+  assert.equal(tagCapabilities('does twitter analysis and reddit analysis').has('search'), false);
+});
+
+test('a plain code-search tool and an unrelated web-research tool are not reported as strongly overlapping', () => {
+  const codeSearchTags = tagCapabilities('ripgrep-based code search');
+  const webResearchTags = tagCapabilities('a web browsing agent for internet lookup');
+  assert.ok(codeSearchTags.has('search'));
+  assert.ok(webResearchTags.has('web-research'));
+  assert.equal(classifyOverlap(codeSearchTags, webResearchTags), 'none');
+});
