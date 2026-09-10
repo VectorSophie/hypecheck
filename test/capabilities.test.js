@@ -95,3 +95,17 @@ test('a plain code-search tool and an unrelated web-research tool are not report
   assert.ok(webResearchTags.has('web-research'));
   assert.equal(classifyOverlap(codeSearchTags, webResearchTags), 'none');
 });
+
+test('semantic-code-nav keywords do not accidentally tag the unrelated search family', () => {
+  const tags = tagCapabilities('semantic code lookup, jump to symbol, code navigation included');
+  assert.ok(tags.has('semantic-code-nav'));
+  assert.equal(tags.has('search'), false);
+});
+
+test('a plain search tool and a semantic-code-nav tool classify as adjacent (via ADJACENCY), not strong-overlap by keyword accident', () => {
+  const searchTags = tagCapabilities('ripgrep-based code search');
+  const navTags = tagCapabilities('semantic code lookup for your codebase');
+  assert.ok(searchTags.has('search'));
+  assert.ok(navTags.has('semantic-code-nav'));
+  assert.equal(classifyOverlap(searchTags, navTags), 'adjacent');
+});

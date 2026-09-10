@@ -85,20 +85,24 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
   }
 
   for (const tool of localTools) {
-    // classifyOverlap runs for EVERY tool, including an exact name match
-    // below — a literally-already-installed tool is the most common form of
-    // duplication there is, and the label should reflect that reality even
-    // though `redundant-installed` (a stronger, separate finding) is what
-    // actually drives the verdict for this case.
-    const overlap = classifyOverlap(candidateTags, tool.tags);
-    if (overlap === 'exact-duplicate') overlapLabels.add('EXACT_DUPLICATE');
-    else if (overlap === 'strong-overlap' || overlap === 'adjacent') overlapLabels.add('CAPABILITY_OVERLAP');
-
     if (tool.name === targetName || tool.name === bareName) {
+      // Exact name match is the strongest duplication signal there is —
+      // stronger than tag-set comparison. Real README/description text is
+      // noisy and picks up many incidental capability tags a short local-tool
+      // description won't replicate, so classifyOverlap's set-equality check
+      // for 'exact-duplicate' rarely fires here in practice even though this
+      // IS the textbook exact-duplicate case. Force the label directly rather
+      // than relying on tag-set equality to happen to hold.
+      overlapLabels.add('EXACT_DUPLICATE');
       findings.push(redundantFinding('redundant-installed', 'strong', tool,
         `Already installed locally as ${tool.kind} \`${tool.name}\`.`));
       continue;
     }
+
+    const overlap = classifyOverlap(candidateTags, tool.tags);
+    if (overlap === 'exact-duplicate') overlapLabels.add('EXACT_DUPLICATE');
+    else if (overlap === 'strong-overlap' || overlap === 'adjacent') overlapLabels.add('CAPABILITY_OVERLAP');
+
     const strength = matchStrength(candidateTags, tool.tags);
     if (strength === 'strong') {
       findings.push(redundantFinding('redundant-capability', 'strong', tool,

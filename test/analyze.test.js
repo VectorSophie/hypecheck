@@ -548,6 +548,24 @@ test('EXACT_DUPLICATE also fires for a tool matched by name (redundant-installed
   assert.ok(analysis.labels.includes('EXACT_DUPLICATE'), `expected EXACT_DUPLICATE for an exact-name-match install, got labels: ${analysis.labels.join(', ')}`);
 });
 
+test('EXACT_DUPLICATE fires for an exact-name-match install even when noisy real README text would otherwise only classify as strong-overlap', () => {
+  // Regression for a real, live-verified gap: a genuine README picks up many
+  // incidental capability tags (test/docs/deploy/git/etc.) that a short local
+  // tool description never replicates, so tag-SET equality (what
+  // classifyOverlap alone checks) almost never holds for a real exact-name
+  // duplicate -- even though this is precisely the case the label exists for.
+  const analysis = analyzeCandidate(
+    {
+      source: 'npm',
+      metadata: { name: 'eslint', description: 'pluggable linting utility' },
+      readme: 'Find and fix problems in your code. Includes a test suite, docs site, git hooks, and a CI/CD deployment pipeline for releases.',
+    },
+    { localTools: [{ kind: 'dep', name: 'eslint', tags: new Set(['linting']) }] },
+  );
+  assert.ok(analysis.findings.some((f) => f.id === 'redundant-installed'));
+  assert.ok(analysis.labels.includes('EXACT_DUPLICATE'), `expected EXACT_DUPLICATE despite noisy README tags, got labels: ${analysis.labels.join(', ')}`);
+});
+
 test('flags an adversarial nested CLAUDE.md hazard in the candidate repo', () => {
   const analysis = analyzeCandidate({
     source: 'github',

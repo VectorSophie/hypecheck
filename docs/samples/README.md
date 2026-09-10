@@ -4,7 +4,7 @@ These are real `hypecheck eval` outputs, captured by actually running the
 CLI — not hand-written examples. Regenerate them any time with:
 
 ```sh
-node bin/hypecheck.js eval <candidate> > docs/samples/<name>.md
+node bin/hypecheck.js eval <candidate> --no-scan > docs/samples/<name>.md
 ```
 
 - [`modelcontextprotocol-server-filesystem.md`](./modelcontextprotocol-server-filesystem.md)

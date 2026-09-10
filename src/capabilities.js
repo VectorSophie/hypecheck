@@ -25,7 +25,11 @@ const FAMILIES = {
   'web-research': ['web browsing agent', 'internet lookup', 'crawls the web for information'],
   'social-research': ['social media monitoring', 'twitter analysis', 'reddit analysis'],
   deployment: ['deploy', 'deployment', 'ci/cd', 'release pipeline'],
-  'semantic-code-nav': ['semantic search', 'code navigation', 'symbol search'],
+  // Avoids the word "search" for the same reason web-research/social-research
+  // do above — "semantic search"/"symbol search" would silently also tag the
+  // unrelated `search` family, only reachable via ADJACENCY through the third
+  // keyword otherwise.
+  'semantic-code-nav': ['semantic code lookup', 'code navigation', 'jump to symbol'],
   lsp: ['language server', 'lsp ', 'go to definition'],
   'symbol-editing': ['rename symbol', 'refactor symbol', 'symbol editing'],
   'mcp-context-filtering': ['context filtering', 'mcp filter', 'tool filtering'],
