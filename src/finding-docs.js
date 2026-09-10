@@ -119,6 +119,10 @@ export const FINDING_DOCS = {
     why: 'purely informational: your global effort/model setting is reported here as budget context, never as a vulnerability — a higher effort level is an economic tradeoff.',
     verify: 'no action needed unless you want to change your global effort/model default.',
   },
+  'candidate-instruction-bomb': {
+    why: 'the candidate repo itself contains a CLAUDE.md nested under a fixtures/tests/malicious-style directory. Claude Code loads nested CLAUDE.md files on demand — if this one is intentionally adversarial (a real risk in a repo you have not yet vetted), it can become live agent instructions the moment you or an agent explores that path.',
+    verify: 'open the named file in the candidate repo yourself and read its content before exploring that directory with an agent.',
+  },
 };
 
 export function explainFinding(id) {

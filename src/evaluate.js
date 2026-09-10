@@ -55,6 +55,7 @@ function evaluateMultiComponent(data, options) {
       candidateCommands: component.commands,
       hookScripts: component.hookScripts ?? {},
       componentRoot: component.path,
+      claudeMdHazards: component.claudeMdHazards ?? [],
       discovery: scopeDiscoveryToComponent(data.discovery, component.path, allComponentPaths),
       components: undefined,
     };

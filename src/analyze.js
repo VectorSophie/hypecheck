@@ -22,6 +22,7 @@ export function analyzeCandidate(data, options = {}) {
   const hookEvents = extractHookEvents(data.manifests);
   const mcpServers = extractMcpServers(data.manifests);
   analyzeManifests(hookEvents, mcpServers, data.componentRoot, data.hookScripts, findings);
+  analyzeInstructionBombs(data.claudeMdHazards, findings);
   analyzeText(data.readme ?? data.html ?? '', findings, { manifestHooksFound: hookEvents.length > 0 });
 
   const localTools = options.localTools;
@@ -186,6 +187,23 @@ function analyzeManifests(hookEvents, mcpServers, componentRoot, hookScripts, fi
       category: mcpServers.length >= 5 ? 'workflow' : 'security',
       title: 'Bundles MCP server(s)',
       evidence: `Declares ${mcpServers.length} MCP server(s)${withSecrets ? `, ${withSecrets} requiring credentials` : ''}.`,
+    });
+  }
+}
+
+// Candidate-repo instruction bombs: discovery.js already classifies nested
+// CLAUDE.md files under fixtures/tests/malicious-style paths (see its
+// ADVERSARIAL_DIR_KEYWORDS, shared with audit-analyze.js's own local-project
+// check from Phase 4) — this turns that already-computed classification into
+// an actual finding, which nothing did before this function existed.
+function analyzeInstructionBombs(hazards, findings) {
+  for (const filePath of hazards ?? []) {
+    findings.push({
+      id: 'candidate-instruction-bomb',
+      severity: 'high',
+      category: 'security',
+      title: 'Adversarial-looking nested CLAUDE.md in candidate repo',
+      evidence: `${filePath} sits under a fixtures/tests/malicious-style directory in this repo. Claude Code loads nested CLAUDE.md files on demand — if you explore this path (e.g. while reviewing the candidate yourself), it can become live agent instructions.`,
     });
   }
 }

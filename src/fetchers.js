@@ -60,6 +60,7 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
     candidateCommands: primary.commands,
     hookScripts: primary.hookScripts ?? {},
     componentRoot: primary.path ?? '',
+    claudeMdHazards: primary.claudeMdHazards ?? [],
     components: discovery.components,
     discovery: {
       marketplace: discovery.marketplace,

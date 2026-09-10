@@ -342,3 +342,32 @@ test('analyzeCandidate tokenEconomics uses discovery.scanned/skipped when presen
   assert.equal(analysis.tokenEconomics.evidenceTier, 'benchmarked');
   assert.ok(analysis.labels.includes('TOKEN_WIN'));
 });
+
+test('flags an adversarial nested CLAUDE.md hazard in the candidate repo', () => {
+  const analysis = analyzeCandidate({
+    source: 'github',
+    metadata: { fullName: 'owner/repo', license: 'MIT' },
+    claudeMdHazards: ['fixtures/malicious_claude_md/CLAUDE.md'],
+  }, { now: new Date('2026-06-15T00:00:00Z') });
+
+  const finding = analysis.findings.find((f) => f.id === 'candidate-instruction-bomb');
+  assert.ok(finding, 'expected a candidate-instruction-bomb finding');
+  assert.equal(finding.severity, 'high');
+  assert.match(finding.evidence, /fixtures\/malicious_claude_md\/CLAUDE\.md/);
+});
+
+test('does not flag when claudeMdHazards is empty or absent', () => {
+  const withEmpty = analyzeCandidate({
+    source: 'github',
+    metadata: { fullName: 'owner/repo', license: 'MIT' },
+    claudeMdHazards: [],
+  }, { now: new Date('2026-06-15T00:00:00Z') });
+  assert.equal(withEmpty.findings.some((f) => f.id === 'candidate-instruction-bomb'), false);
+
+  const withAbsent = analyzeCandidate({
+    source: 'npm',
+    metadata: { name: 'clean-pkg', license: 'MIT', publishedAt: '2026-01-01T00:00:00Z' },
+    package: {},
+  }, { now: new Date('2026-06-15T00:00:00Z') });
+  assert.equal(withAbsent.findings.some((f) => f.id === 'candidate-instruction-bomb'), false);
+});
