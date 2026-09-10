@@ -50,7 +50,7 @@ async function fetchGithubCandidate(candidate, fetchImpl, headers) {
     subpath: candidate.subpath ?? '',
   });
 
-  const primary = discovery.components[0] ?? { manifests: { plugin: null, hooks: null, mcp: null }, commands: [], hookScripts: {}, path: '' };
+  const primary = discovery.components[0] ?? { manifests: { plugin: null, hooks: null, mcp: null }, commands: [], hookScripts: {}, path: '', claudeMdHazards: [] };
 
   return {
     source: 'github',

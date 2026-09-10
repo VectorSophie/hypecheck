@@ -356,6 +356,20 @@ test('flags an adversarial nested CLAUDE.md hazard in the candidate repo', () =>
   assert.match(finding.evidence, /fixtures\/malicious_claude_md\/CLAUDE\.md/);
 });
 
+test('multiple hazard paths each produce their own distinct finding, not one merged finding', () => {
+  const analysis = analyzeCandidate({
+    source: 'github',
+    metadata: { fullName: 'owner/repo', license: 'MIT' },
+    claudeMdHazards: ['fixtures/a/CLAUDE.md', 'fixtures/b/CLAUDE.md'],
+  }, { now: new Date('2026-06-15T00:00:00Z') });
+
+  const bombs = analysis.findings.filter((f) => f.id === 'candidate-instruction-bomb');
+  assert.equal(bombs.length, 2, 'expected one candidate-instruction-bomb finding per hazard path');
+  assert.ok(bombs.every((f) => f.severity === 'high'));
+  assert.ok(bombs.some((f) => f.evidence.includes('fixtures/a/CLAUDE.md')));
+  assert.ok(bombs.some((f) => f.evidence.includes('fixtures/b/CLAUDE.md')));
+});
+
 test('does not flag when claudeMdHazards is empty or absent', () => {
   const withEmpty = analyzeCandidate({
     source: 'github',

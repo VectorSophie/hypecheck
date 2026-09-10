@@ -196,6 +196,20 @@ function analyzeManifests(hookEvents, mcpServers, componentRoot, hookScripts, fi
 // ADVERSARIAL_DIR_KEYWORDS, shared with audit-analyze.js's own local-project
 // check from Phase 4) — this turns that already-computed classification into
 // an actual finding, which nothing did before this function existed.
+//
+// KNOWN LIMITATION: one finding fires per hazard PATH, unbounded — a
+// legitimate security-research repo with 2+ committed test fixtures
+// matching the adversarial-directory keywords will cross score.js's
+// `highSecurity >= 2` DANGEROUS threshold from this feature alone, with no
+// other corroborating signal. Unlike audit-analyze.js's local-project
+// version of this check, a .gitignore exclusion can't help here — discovery.js
+// only ever sees paths already present in the committed git tree via the
+// GitHub API, so a gitignored file would never reach `claudeMdHazards` in
+// the first place. Accepted for now: severity stays unconditionally 'high'
+// per finding (matching the local-project version's own calibration), and
+// deduping same-source findings before the DANGEROUS threshold is a
+// score.js-wide question, not something to special-case for this one
+// finding id (see CLAUDE.md's "don't special-case verdicts elsewhere").
 function analyzeInstructionBombs(hazards, findings) {
   for (const filePath of hazards ?? []) {
     findings.push({
