@@ -356,6 +356,17 @@ test('flags an adversarial nested CLAUDE.md hazard in the candidate repo', () =>
   assert.match(finding.evidence, /fixtures\/malicious_claude_md\/CLAUDE\.md/);
 });
 
+test('candidate-instruction-bomb is provenance "inferred", not "manifest" -- it comes from a path-name match, not parsed config content', () => {
+  const analysis = analyzeCandidate({
+    source: 'github',
+    metadata: { fullName: 'owner/repo', license: 'MIT' },
+    claudeMdHazards: ['fixtures/malicious_claude_md/CLAUDE.md'],
+  }, { now: new Date('2026-06-15T00:00:00Z') });
+
+  const finding = analysis.findings.find((f) => f.id === 'candidate-instruction-bomb');
+  assert.equal(finding.provenance, 'inferred');
+});
+
 test('multiple hazard paths each produce their own distinct finding, not one merged finding', () => {
   const analysis = analyzeCandidate({
     source: 'github',

@@ -224,7 +224,14 @@ function analyzeInstructionBombs(hazards, findings) {
       category: 'security',
       title: 'Adversarial-looking nested CLAUDE.md in candidate repo',
       evidence: `${filePath} sits under a fixtures/tests/malicious-style directory in this repo. Claude Code loads nested CLAUDE.md files on demand — if you explore this path (e.g. while reviewing the candidate yourself), it can become live agent instructions.`,
-      provenance: 'manifest',
+      // 'inferred', not 'manifest': this comes from discovery.js classifying
+      // a file PATH by name pattern, not from parsing hooks.json/plugin.json/
+      // mcp.json/package.json content — no config file was actually read to
+      // produce this finding. Labeling it 'manifest' would let score.js's
+      // confidence calc treat a directory-naming coincidence as the same
+      // strength of evidence as an actually-parsed manifest, compounding the
+      // multi-hazard/DANGEROUS risk already noted above.
+      provenance: 'inferred',
     });
   }
 }
