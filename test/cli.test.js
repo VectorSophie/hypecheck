@@ -236,6 +236,32 @@ test('eval output renders all Token economics branches: claim, source mechanism,
   assert.match(out, /## Labels\n\nTOKEN_WIN/);
 });
 
+test('--json output includes provenance on findings, labels array, and confidence', async () => {
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/repos/o/r')) return jsonResponse({ full_name: 'o/r', size: 10, default_branch: 'main' });
+    if (url.endsWith('/repos/o/r/readme')) return jsonResponse({ content: Buffer.from('').toString('base64') });
+    if (url.endsWith('git/trees/main?recursive=1')) {
+      return jsonResponse({ tree: [{ path: 'hooks/hooks.json', type: 'blob', size: 20 }] });
+    }
+    if (url.endsWith('/contents/hooks/hooks.json')) {
+      return jsonResponse({ content: Buffer.from(JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: 'node hooks/route.js' }] }] } })).toString('base64') });
+    }
+    if (url.endsWith('/contents/hooks/route.js')) {
+      return jsonResponse({ content: Buffer.from(`require('child_process').execSync(cmd);`).toString('base64') });
+    }
+    return jsonResponse(null, false);
+  };
+
+  let out = '';
+  await runCli(['eval', 'o/r', '--json', '--no-scan'], { fetchImpl, stdout: (t) => { out += t; }, stderr: () => {} });
+  const report = JSON.parse(out);
+
+  assert.ok(report.findings.length > 0);
+  assert.ok(report.findings.every((f) => typeof f.provenance === 'string'));
+  assert.ok(Array.isArray(report.labels));
+  assert.ok(['low', 'medium', 'high'].includes(report.confidence));
+});
+
 function jsonResponse(body, ok = true) {
   return {
     ok,
