@@ -107,6 +107,7 @@ function redundantFinding(id, strength, tool, evidence) {
     category: 'redundancy',
     title: 'Capability already covered locally',
     evidence,
+    provenance: 'local-config',
   };
 }
 
@@ -120,6 +121,7 @@ function analyzeNpm(data, findings, now) {
       category: 'maintenance',
       title: 'Missing license',
       evidence: 'No package license was found in registry metadata.',
+      provenance: 'package-metadata',
     });
   }
 
@@ -134,6 +136,7 @@ function analyzeGithub(data, findings, now) {
       category: 'maintenance',
       title: 'Missing license',
       evidence: 'No repository license was found in GitHub metadata.',
+      provenance: 'package-metadata',
     });
   }
 
@@ -156,6 +159,7 @@ function analyzePackageSignals(data, findings) {
       category: 'security',
       title: 'Package lifecycle script',
       evidence: `package.json declares lifecycle script(s): ${signals.lifecycleScripts.join(', ')}.`,
+      provenance: 'manifest',
     });
   }
 
@@ -167,6 +171,7 @@ function analyzePackageSignals(data, findings) {
       category: 'security',
       title: 'Shell execution dependency',
       evidence: `Dependencies include shell/process execution package(s): ${shellDeps.join(', ')}.`,
+      provenance: 'manifest',
     });
   }
 }
@@ -187,6 +192,7 @@ function analyzeManifests(hookEvents, mcpServers, componentRoot, hookScripts, fi
       category: mcpServers.length >= 5 ? 'workflow' : 'security',
       title: 'Bundles MCP server(s)',
       evidence: `Declares ${mcpServers.length} MCP server(s)${withSecrets ? `, ${withSecrets} requiring credentials` : ''}.`,
+      provenance: 'manifest',
     });
   }
 }
@@ -218,6 +224,7 @@ function analyzeInstructionBombs(hazards, findings) {
       category: 'security',
       title: 'Adversarial-looking nested CLAUDE.md in candidate repo',
       evidence: `${filePath} sits under a fixtures/tests/malicious-style directory in this repo. Claude Code loads nested CLAUDE.md files on demand — if you explore this path (e.g. while reviewing the candidate yourself), it can become live agent instructions.`,
+      provenance: 'manifest',
     });
   }
 }
@@ -235,6 +242,7 @@ const HIGH_RISK_HOOK_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUse
 // bucket regardless of what it actually does.
 function hookFinding(capability) {
   const { event, command } = capability;
+  const provenance = capability.sourceInspected ? 'source' : 'manifest';
   // filesystemWrite/filesystemRead are deliberately excluded here: writing a
   // log/cache file is extremely common and not inherently dangerous, and the
   // static regexes can't distinguish a fixed path from an attacker-influenced
@@ -258,6 +266,7 @@ function hookFinding(capability) {
       category: 'security',
       title: 'Hook has an observed dangerous capability',
       evidence: `A ${event} hook (\`${truncate(command)}\`) ${capability.sourceInspected ? 'was inspected and shows' : 'shows'} ${matched.join(', ')}.`,
+      provenance,
     };
   }
 
@@ -268,6 +277,7 @@ function hookFinding(capability) {
       category: 'security',
       title: 'Hook auto-allows permission, bypassing the normal prompt',
       evidence: `A ${event} hook (\`${truncate(command)}\`) returns \`permissionDecision: "allow"\`, bypassing Claude's normal permission flow.`,
+      provenance,
     };
   }
 
@@ -278,6 +288,7 @@ function hookFinding(capability) {
       category: 'security',
       title: 'Unverified hook on a high-impact event',
       evidence: `A ${event} hook (\`${truncate(command)}\`) runs with full user permissions on every matching tool call; its source could not be inspected, so its actual behavior is unverified.`,
+      provenance,
     };
   }
 
@@ -287,6 +298,7 @@ function hookFinding(capability) {
     category: 'security',
     title: capability.sourceInspected ? 'Hook inspected, no dangerous capability found' : 'Hook not inspected, no dangerous pattern visible in the command',
     evidence: `A ${event} hook (\`${truncate(command)}\`)${capability.sourceInspected ? ' was inspected and shows' : ' shows'} no shell execution, network access, credential access, or destructive capability.`,
+    provenance,
   };
 }
 
@@ -304,6 +316,7 @@ function analyzeCollisions(candidateHooks, candidateMcp, candidateCommands, loca
         category: 'workflow',
         title: 'Hook event collision',
         evidence: `Adds a ${event} hook; you already run ${localOnEvent.length} hook(s) on ${event}.`,
+        provenance: 'local-config',
       });
     }
   }
@@ -317,6 +330,7 @@ function analyzeCollisions(candidateHooks, candidateMcp, candidateCommands, loca
         category: 'workflow',
         title: 'MCP server name collision',
         evidence: `Registers an MCP server named \`${server.name}\`, which you already have configured locally.`,
+        provenance: 'local-config',
       });
     }
   }
@@ -330,6 +344,7 @@ function analyzeCollisions(candidateHooks, candidateMcp, candidateCommands, loca
         category: 'workflow',
         title: 'Command/skill name collision',
         evidence: `Ships a command/skill named \`${name}\`, which already exists in your setup.`,
+        provenance: 'local-config',
       });
     }
   }
@@ -347,6 +362,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       category: 'security',
       title: 'Secret or credential access mentioned',
       evidence: 'README or metadata references secrets, tokens, API keys, SSH keys, or .env files.',
+      provenance: 'readme',
     });
   }
 
@@ -357,6 +373,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       category: 'security',
       title: 'Shell capability mentioned',
       evidence: 'README or metadata mentions running shell commands.',
+      provenance: 'readme',
     });
   }
 
@@ -368,6 +385,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       category: 'security',
       title: 'Prompt-injection / tool-poisoning pattern',
       evidence: 'Text contains model-facing override or exfiltration instructions, a known tool-poisoning vector.',
+      provenance: 'readme',
     });
   }
 
@@ -383,6 +401,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       evidence: manifestHooksFound
         ? `README mentions a ${hookEvent[1]} hook; see the hook-* findings above for the actual configured behavior.`
         : `References a ${hookEvent[1]} hook, which runs shell commands with full user permissions.`,
+      provenance: 'readme',
     });
   }
 
@@ -393,6 +412,7 @@ function analyzeText(text, findings, { manifestHooksFound = false } = {}) {
       category: 'workflow',
       title: 'Agent tooling candidate',
       evidence: 'README or metadata indicates this affects Claude Code, MCP, hooks, slash commands, or agents.',
+      provenance: 'readme',
     });
   }
 }
@@ -408,6 +428,7 @@ function addStaleFinding(dateValue, now, findings) {
       category: 'maintenance',
       title: 'Stale maintenance signal',
       evidence: `Latest observed activity is ${ageDays} days old.`,
+      provenance: 'package-metadata',
     });
   }
 }

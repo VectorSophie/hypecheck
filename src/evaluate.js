@@ -120,6 +120,7 @@ function driftFinding({ addedHooks, addedMcp, addedMaintainers = [], removedMain
       category: 'security',
       title: 'Package maintainers changed since last vetting',
       evidence: `Maintainers changed${ver}: ${parts.join('; ')}. A common rug-pull precursor — re-review before trusting.`,
+      provenance: 'package-metadata',
     };
   }
   if (addedHooks.length || addedMcp.length) {
@@ -133,6 +134,7 @@ function driftFinding({ addedHooks, addedMcp, addedMaintainers = [], removedMain
       category: 'security',
       title: 'Executable surface changed since last vetting',
       evidence: `Added since you last checked${ver}: ${parts.join(', ')}. Possible rug-pull — re-review before trusting.`,
+      provenance: 'manifest',
     };
   }
   if (versionChanged) {
@@ -142,6 +144,7 @@ function driftFinding({ addedHooks, addedMcp, addedMaintainers = [], removedMain
       category: 'maintenance',
       title: 'Version changed since last vetting',
       evidence: `Version changed${ver} with no change to hooks or MCP servers.`,
+      provenance: 'manifest',
     };
   }
   return null;

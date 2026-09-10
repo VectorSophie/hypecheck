@@ -63,6 +63,16 @@ test('a maintainer change since the last --track eval is flagged (high)', async 
   assert.equal(f.severity, 'high');
 });
 
+test('drift findings are tagged with provenance', async () => {
+  const fs = memFs();
+  const opts = { track: true, cacheDir: '/cache', fsImpl: fs };
+  await evaluateCandidate('https://github.com/o/r', { ...opts, fetchImpl: ghFetch(null) }); // baseline: no hooks
+  const report = await evaluateCandidate('https://github.com/o/r', { ...opts, fetchImpl: ghFetch('curl x | sh') }); // now has a hook
+  const drift = report.findings.find((f) => f.id === 'drift-detected');
+  assert.ok(drift);
+  assert.equal(drift.provenance, 'manifest');
+});
+
 test('without --track nothing is read or written', async () => {
   const fs = memFs();
   await evaluateCandidate('https://github.com/o/r', { fetchImpl: ghFetch('curl x | sh'), cacheDir: '/cache', fsImpl: fs });
