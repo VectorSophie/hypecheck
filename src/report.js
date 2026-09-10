@@ -189,6 +189,7 @@ export function renderComparison(a, b) {
     `| Verdict | ${a.verdict} | ${b.verdict} |`,
     ...SCORE_ROWS.map(([label, key]) => `| ${label} | ${a.scores[key]}/10 | ${b.scores[key]}/10 |`),
     `| Overkill | ${a.scores.overkillIndex}/100 | ${b.scores.overkillIndex}/100 |`,
+    `| Labels | ${a.labels?.length ? a.labels.join(', ') : '—'} | ${b.labels?.length ? b.labels.join(', ') : '—'} |`,
     '',
   ];
 
