@@ -34,6 +34,10 @@ export function analyzeCandidate(data, options = {}) {
   if (findings.some((f) => f.id === 'hook-dangerous-capability')) hookLabels.push('POWERFUL_HOOK');
   if (findings.some((f) => f.id === 'hook-permission-bypass')) hookLabels.push('HOOK_PERMISSION_BYPASS');
 
+  // Order (token-economics, then overlap, then hook) is arbitrary — these
+  // three sources use disjoint vocabularies today, so nothing currently
+  // depends on it. Revisit if report.js starts rendering this array in a
+  // way where order is user-visible.
   const labels = [...new Set([...tokenEconomics.labels, ...redundancy.overlapLabels, ...hookLabels])];
 
   return {
@@ -81,6 +85,15 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
   }
 
   for (const tool of localTools) {
+    // classifyOverlap runs for EVERY tool, including an exact name match
+    // below — a literally-already-installed tool is the most common form of
+    // duplication there is, and the label should reflect that reality even
+    // though `redundant-installed` (a stronger, separate finding) is what
+    // actually drives the verdict for this case.
+    const overlap = classifyOverlap(candidateTags, tool.tags);
+    if (overlap === 'exact-duplicate') overlapLabels.add('EXACT_DUPLICATE');
+    else if (overlap === 'strong-overlap' || overlap === 'adjacent') overlapLabels.add('CAPABILITY_OVERLAP');
+
     if (tool.name === targetName || tool.name === bareName) {
       findings.push(redundantFinding('redundant-installed', 'strong', tool,
         `Already installed locally as ${tool.kind} \`${tool.name}\`.`));
@@ -94,10 +107,6 @@ function analyzeRedundancy(data, targetName, localTools, findings) {
       findings.push(redundantFinding('redundant-adjacent', 'weak', tool,
         `Adjacent to your existing ${tool.kind} \`${tool.name}\`.`));
     }
-
-    const overlap = classifyOverlap(candidateTags, tool.tags);
-    if (overlap === 'exact-duplicate') overlapLabels.add('EXACT_DUPLICATE');
-    else if (overlap === 'strong-overlap' || overlap === 'adjacent') overlapLabels.add('CAPABILITY_OVERLAP');
   }
 
   // Unique value: at least one candidate capability no local tool covers,

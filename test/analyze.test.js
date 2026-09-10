@@ -418,6 +418,31 @@ test('labels array never contains duplicate entries', () => {
   assert.equal(powerfulCount, 1, `expected POWERFUL_HOOK exactly once, got labels: ${analysis.labels.join(', ')}`);
 });
 
+test('EXACT_DUPLICATE appears once even when TWO different local tools each classify as an exact duplicate', () => {
+  const analysis = analyzeCandidate({
+    source: 'npm',
+    metadata: { name: 'my-formatter', license: 'MIT', publishedAt: '2026-01-01T00:00:00Z', description: 'runs prettier' },
+    package: {},
+  }, {
+    now: new Date('2026-06-15T00:00:00Z'),
+    localTools: [
+      { kind: 'dep', name: 'prettier-one', tags: new Set(['formatting']) },
+      { kind: 'dep', name: 'prettier-two', tags: new Set(['formatting']) },
+    ],
+  });
+  const exactCount = analysis.labels.filter((l) => l === 'EXACT_DUPLICATE').length;
+  assert.equal(exactCount, 1, `expected EXACT_DUPLICATE exactly once even with two matching local tools, got labels: ${analysis.labels.join(', ')}`);
+});
+
+test('EXACT_DUPLICATE also fires for a tool matched by name (redundant-installed), not just by capability tags', () => {
+  const analysis = analyzeCandidate(
+    { source: 'npm', metadata: { name: 'prettier', description: 'code formatter' }, readme: '' },
+    { localTools: [{ kind: 'dep', name: 'prettier', tags: new Set(['formatting']) }] },
+  );
+  assert.ok(analysis.findings.some((f) => f.id === 'redundant-installed'));
+  assert.ok(analysis.labels.includes('EXACT_DUPLICATE'), `expected EXACT_DUPLICATE for an exact-name-match install, got labels: ${analysis.labels.join(', ')}`);
+});
+
 test('flags an adversarial nested CLAUDE.md hazard in the candidate repo', () => {
   const analysis = analyzeCandidate({
     source: 'github',
