@@ -136,3 +136,69 @@ test('a TOKEN_WIN label alone cannot override a DANGEROUS verdict driven by real
   }));
   assert.equal(scored.verdict, 'DANGEROUS');
 });
+
+test('confidence is high when at least one finding has manifest or source provenance', () => {
+  const analysis = {
+    findings: [{ id: 'npm-lifecycle-script', severity: 'high', category: 'security', provenance: 'manifest', evidence: 'x' }],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: [],
+  };
+  const scored = scoreAnalysis(analysis);
+  assert.equal(scored.confidence, 'high');
+});
+
+test('confidence falls back to the finding-count heuristic when nothing has manifest/source provenance', () => {
+  const fewFindings = {
+    findings: [{ id: 'secret-reference', severity: 'low', category: 'security', provenance: 'readme', evidence: 'x' }],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: [],
+  };
+  assert.equal(scoreAnalysis(fewFindings).confidence, 'low');
+
+  const manyFindings = {
+    findings: [
+      { id: 'a', severity: 'low', category: 'security', provenance: 'readme', evidence: 'x' },
+      { id: 'b', severity: 'low', category: 'workflow', provenance: 'readme', evidence: 'x' },
+      { id: 'c', severity: 'low', category: 'maintenance', provenance: 'package-metadata', evidence: 'x' },
+    ],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: [],
+  };
+  assert.equal(scoreAnalysis(manyFindings).confidence, 'medium');
+});
+
+test('GLOBAL_SCOPE_OVERKILL label fires when overkillIndex crosses 70, and is merged into the final labels array', () => {
+  const analysis = {
+    findings: [
+      { id: 'npm-lifecycle-script', severity: 'high', category: 'security', provenance: 'manifest', evidence: 'x' },
+      { id: 'shell-execution-dependency', severity: 'high', category: 'security', provenance: 'manifest', evidence: 'x' },
+    ],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: ['TOKEN_WIN'],
+  };
+  const scored = scoreAnalysis(analysis);
+  assert.ok(scored.scores.overkillIndex >= 70, `expected overkillIndex >= 70, got ${scored.scores.overkillIndex}`);
+  assert.ok(scored.labels.includes('GLOBAL_SCOPE_OVERKILL'));
+  assert.ok(scored.labels.includes('TOKEN_WIN'), 'existing analysis.labels must survive into the final scored labels array');
+});
+
+test('GLOBAL_SCOPE_OVERKILL does not fire when overkillIndex stays below 70', () => {
+  const analysis = { findings: [], hasUniqueCapability: true, fit: { signal: 'none' }, labels: [] };
+  const scored = scoreAnalysis(analysis);
+  assert.ok(scored.scores.overkillIndex < 70);
+  assert.equal(scored.labels.includes('GLOBAL_SCOPE_OVERKILL'), false);
+});
+
+test('a candidate-instruction-bomb finding alone (provenance inferred) does not grant high confidence', () => {
+  const analysis = {
+    findings: [{ id: 'candidate-instruction-bomb', severity: 'high', category: 'security', provenance: 'inferred', evidence: 'x' }],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: [],
+  };
+  assert.equal(scoreAnalysis(analysis).confidence, 'low');
+});

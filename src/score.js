@@ -27,13 +27,29 @@ export function scoreAnalysis(analysis) {
 
   const verdict = chooseVerdict(scores, analysis.findings, analysis.hasUniqueCapability !== false);
 
+  const scoreLabels = scores.overkillIndex >= 70 ? ['GLOBAL_SCOPE_OVERKILL'] : [];
+  const labels = [...new Set([...(analysis.labels ?? []), ...scoreLabels])];
+
   return {
     ...analysis,
     verdict,
     scores,
-    confidence: analysis.findings.length >= 3 ? 'medium' : 'low',
+    confidence: computeConfidence(analysis.findings),
     summary: roast(verdict, analysis.findings),
+    labels,
   };
+}
+
+// Directly-inspected evidence (a real manifest parsed, or a hook script
+// actually fetched and read) earns 'high' confidence outright — one solid
+// piece of ground truth outweighs a pile of README pattern-matches. With no
+// such evidence, fall back to the pre-Phase-5 heuristic (finding count),
+// since a candidate with zero directly-inspected evidence and few findings
+// genuinely tells us less than one with many.
+function computeConfidence(findings) {
+  const hasDirectEvidence = findings.some((f) => f.provenance === 'manifest' || f.provenance === 'source');
+  if (hasDirectEvidence) return 'high';
+  return findings.length >= 3 ? 'medium' : 'low';
 }
 
 const OPENERS = {
