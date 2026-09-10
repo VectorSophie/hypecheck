@@ -4,6 +4,10 @@ const SEVERITY_WEIGHT = {
   high: 4,
 };
 
+// Shared by GLOBAL_SCOPE_OVERKILL's label and chooseVerdict's SKIP branch —
+// same threshold, kept as one constant so the two don't silently drift apart.
+const OVERKILL_THRESHOLD = 70;
+
 export function scoreAnalysis(analysis) {
   const securityPoints = pointsFor(analysis.findings, 'security');
   const maintenancePoints = pointsFor(analysis.findings, 'maintenance');
@@ -27,7 +31,7 @@ export function scoreAnalysis(analysis) {
 
   const verdict = chooseVerdict(scores, analysis.findings, analysis.hasUniqueCapability !== false);
 
-  const scoreLabels = scores.overkillIndex >= 70 ? ['GLOBAL_SCOPE_OVERKILL'] : [];
+  const scoreLabels = scores.overkillIndex >= OVERKILL_THRESHOLD ? ['GLOBAL_SCOPE_OVERKILL'] : [];
   const labels = [...new Set([...(analysis.labels ?? []), ...scoreLabels])];
 
   return {
@@ -46,6 +50,17 @@ export function scoreAnalysis(analysis) {
 // such evidence, fall back to the pre-Phase-5 heuristic (finding count),
 // since a candidate with zero directly-inspected evidence and few findings
 // genuinely tells us less than one with many.
+//
+// KNOWN LIMITATION (first pass, per design): this is a binary rule with no
+// weighting by finding count or severity. A single LOW-severity manifest
+// finding (e.g. one benign `mcp-servers` declaration) earns the exact same
+// 'high' confidence as five high-severity manifest findings — "confidence"
+// here means "we have at least one piece of real evidence," not "we have a
+// lot of it" or "it's alarming." Confidence and verdict are also computed
+// independently and can disagree (e.g. DANGEROUS + confidence: 'low' when
+// two inferred-provenance findings alone trigger the verdict). Revisit if
+// report rendering starts presenting "Confidence: high" in a way a user
+// could mistake for "thoroughly vetted" rather than "based on real config."
 function computeConfidence(findings) {
   const hasDirectEvidence = findings.some((f) => f.provenance === 'manifest' || f.provenance === 'source');
   if (hasDirectEvidence) return 'high';
@@ -93,7 +108,7 @@ function chooseVerdict(scores, findings, hasUniqueCapability) {
 
   if (highSecurity >= 2 || scores.securityRisk >= 9) return 'DANGEROUS';
   if (scores.redundancy >= 6 && !hasUniqueCapability) return 'REDUNDANT';
-  if (scores.overkillIndex >= 70) return 'SKIP';
+  if (scores.overkillIndex >= OVERKILL_THRESHOLD) return 'SKIP';
   if (scores.securityRisk >= 7) return 'TRIAL';
   return 'INSTALL';
 }

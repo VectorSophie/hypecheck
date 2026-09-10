@@ -202,3 +202,15 @@ test('a candidate-instruction-bomb finding alone (provenance inferred) does not 
   };
   assert.equal(scoreAnalysis(analysis).confidence, 'low');
 });
+
+test('KNOWN LIMITATION (pinned, not a regression): one low-severity manifest finding alone earns high confidence, same as many', () => {
+  const analysis = {
+    findings: [{ id: 'mcp-servers', severity: 'low', category: 'security', provenance: 'manifest', evidence: 'x' }],
+    hasUniqueCapability: true,
+    fit: { signal: 'none' },
+    labels: [],
+  };
+  const scored = scoreAnalysis(analysis);
+  assert.equal(scored.verdict, 'INSTALL');
+  assert.equal(scored.confidence, 'high', 'documents current behavior: confidence means "we have real evidence," not "we have a lot of it"');
+});
